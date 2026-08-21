@@ -1,0 +1,78 @@
+# Test the model, regenerate every figure, and build the manuscript.
+#
+# TeX is not a pixi dependency: conda-forge's texlive-core ships the binaries
+# with an empty texmf tree (zero .sty files), so it can typeset neither this
+# document nor matplotlib's text-measurement run.  It comes from apt instead.
+# The package list below is exactly what main.tex, the TikZ sources and
+# matplotlib's pgf backend load between them -- `pixi run -e paper check-tex`
+# is the same check, for a local machine.
+
+name: paper
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: default
+          locked: true
+          cache: true
+      - name: The full suite, including the slow checks
+        run: pixi run test-all
+
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install TeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-base \
+            texlive-latex-base \
+            texlive-latex-recommended \
+            texlive-pictures \
+            latexmk
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: paper
+          locked: true
+          cache: true
+
+      - name: Is the TeX installation complete?
+        run: pixi run -e paper check-tex
+
+      - name: Regenerate the figures and build the PDF
+        run: pixi run -e paper pdf
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manuscript
+          path: manuscript/main.pdf
+          if-no-files-found: error
+
+      ## The generated figures are tracked, so that a clone can build the paper
+      ## with LaTeX alone.  This is the check that they have not gone stale --
+      ## last, so that the PDF above is uploaded either way.
+      ##
+      ## It compares bytes, so it only holds if the figures were generated with
+      ## this same locked environment.  Regenerate with `pixi run -e paper
+      ## figures`, never with a system Python: matplotlib 3.10 and 3.11 write
+      ## different .pgf for identical input.
+      #- name: The committed figures must match their sources
+      #  run: |
+      #    git diff --exit-code --stat -- manuscript \
+      #      || { echo "::error::Figures in manuscript/ are out of date. Run 'pixi run -e paper figures' and commit."; exit 1; }
