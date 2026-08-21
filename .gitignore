@@ -1,6 +1,6 @@
 .DS_Store
-fig*.pdf
-fig*.pgf
+manuscript/fig*
+manuscript/table.tex
 
 # LaTeX build products
 *.aux
