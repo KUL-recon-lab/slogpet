@@ -1,0 +1,103 @@
+# Dependencies, per task.
+#
+# Three environments, because the three things one does here need genuinely
+# different tools:
+#
+#   default   numpy + scipy + pytest    the model and its test suite  (~2 s)
+#   paper     + matplotlib              make_all.py, then latexmk
+#   web       python and nothing else   web/build.py
+#
+# Two of those are not what one would guess, and both were checked rather than
+# assumed:
+#
+#   * TeX is needed to GENERATE the figures, not merely to typeset the document
+#     afterwards.  matplotlib's pgf backend shells out to pdflatex to measure
+#     text, loading scrextend, underscore, amsmath and graphicx as it goes.  With
+#     pdflatex removed from PATH, `make_all.py --only profile` fails, while
+#     Figure 1 (Agg backend), table.tex and the whole test suite still succeed.
+#
+#   * The web build needs NOTHING beyond the standard library: web/build.py
+#     imports json, os and sys.  Pyodide is fetched by the browser from a CDN at
+#     page load, so it is not a build-time dependency at all.  The `web`
+#     environment sets no-default-feature, so it cannot even see numpy or scipy
+#     -- which keeps that claim honest rather than merely stated.
+#
+# TeX itself is deliberately NOT a pixi dependency.  conda-forge's texlive-core
+# ships the binaries and nothing else: an 8 MB texmf tree with zero .sty files,
+# so it can typeset neither this document nor matplotlib's measurement run, and
+# conda-forge has no package that supplies the missing styles.  So TeX comes from
+# the system:
+#
+#     Debian/Ubuntu   apt-get install -y --no-install-recommends \
+#                       texlive-base texlive-latex-base texlive-latex-recommended \
+#                       texlive-pictures latexmk
+#     macOS           MacTeX, or BasicTeX plus
+#                       tlmgr install latexmk pgfplots subcaption caption \
+#                                     mathtools koma-script underscore
+#
+# `pixi run check-tex` reports whether the toolchain is complete before you
+# discover it isn't halfway through a build.
+
+[workspace]
+name = "slogpet"
+version = "0.1.0"
+description = "SLoG detectability of cylindrical PET systems"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+# ---------------------------------------------------------------- the model
+[dependencies]
+python = ">=3.9"
+numpy = ">=1.22"
+scipy = ">=1.8"
+
+# ---------------------------------------------------------------- the tests
+[feature.test.dependencies]
+pytest = ">=7"
+
+[feature.test.tasks]
+test = { cmd = "pytest", description = "the fast suite (~2 s)" }
+test-all = { cmd = "pytest -m ''", description = "also Monte Carlo and Eq. (53)" }
+
+# ------------------------------------------------- the figures and the paper
+[feature.paper.dependencies]
+matplotlib-base = ">=3.5"
+
+# Figure 1 is a PDF, and PDFs carry a creation date, which would make the file
+# differ on every run and the check-figures gate below fail every time.
+# matplotlib honours SOURCE_DATE_EPOCH, so fixing it makes the output
+# byte-reproducible.  The value is arbitrary and only has to stay constant.
+[feature.paper.activation.env]
+SOURCE_DATE_EPOCH = "1700000000"
+
+[feature.paper.tasks]
+figures = { cmd = "python make_all.py", description = "regenerate every figure and table" }
+pdf = { cmd = "latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex", cwd = "manuscript", depends-on = [
+  "figures",
+], description = "build the manuscript" }
+clean = { cmd = "latexmk -C main.tex", cwd = "manuscript", description = "remove LaTeX build products" }
+# The generated figures are tracked, so that a clone can build the paper with
+# LaTeX alone.  This is the check that they have not gone stale.
+check-figures = { cmd = "git diff --exit-code --stat -- manuscript", depends-on = [
+  "figures",
+], description = "fail if the committed figures are out of date" }
+check-tex = { cmd = "kpsewhich amsmath.sty amssymb.sty booktabs.sty caption.sty geometry.sty graphicx.sty hyperref.sty mathtools.sty pgfplots.sty rotating.sty scrextend.sty subcaption.sty tikz.sty underscore.sty > /dev/null && latexmk -version", description = "is the system TeX complete?" }
+
+# ------------------------------------------------------------- the web page
+[feature.web.dependencies]
+python = ">=3.9"          # and nothing else: build.py imports json, os, sys
+
+[feature.web.tasks]
+web = { cmd = "python web/build.py", description = "regenerate web/index.html" }
+check-web = { cmd = "git diff --exit-code --stat -- web/index.html", depends-on = [
+  "web",
+], description = "fail if index.html is out of date" }
+
+[feature.webcheck.dependencies]
+playwright = "*"
+
+[environments]
+default = ["test"]
+paper = ["paper"]
+web = { features = ["web"], no-default-feature = true }
+webcheck = ["web", "webcheck"]

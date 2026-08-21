@@ -1,0 +1,77 @@
+%% tikz-geometry.tex --- included by sensitivity_derivation.tex
+%% Figure 1: side view of the detector cylinder with the accepted solid angle.
+%% Requires: tikz, pgfplots (compat=1.18), arrows.meta.
+
+\begin{tikzpicture}[>={Latex[length=2mm]},scale=0.95]
+  \pgfmathsetmacro{\A}{9}\pgfmathsetmacro{\R}{2.2}\pgfmathsetmacro{\zz}{1.2}
+  \pgfmathsetmacro{\LL}{11}\pgfmathsetmacro{\Ah}{\A/2}
+  \pgfmathsetmacro{\done}{\Ah-\zz}\pgfmathsetmacro{\zfar}{\zz-\done}
+  \pgfmathsetmacro{\thone}{atan(\R/\done)}
+  \pgfmathsetmacro{\ee}{0.62}\pgfmathsetmacro{\tw}{0.34}
+  \pgfmathsetmacro{\eeo}{\ee*(\R+\tw)/\R}
+  \pgfmathsetmacro{\rO}{1.05}\pgfmathsetmacro{\eO}{\ee*\rO/\R}
+  % where the limiting LOR enters and leaves the attenuating cylinder
+  \pgfmathsetmacro{\zin}{\zz-\done*\rO/\R}\pgfmathsetmacro{\zout}{\zz+\done*\rO/\R}
+
+  % ---- detector cylinder, side view: walls and far rim -------------------
+  \fill[black!8] (-\Ah,\R) rectangle (\Ah,{\R+\tw});
+  \fill[black!8] (-\Ah,{-\R-\tw}) rectangle (\Ah,-\R);
+  \draw[black!45] (-\Ah,\R) -- (\Ah,\R);   \draw[black!45] (-\Ah,{\R+\tw}) -- (\Ah,{\R+\tw});
+  \draw[black!45] (-\Ah,-\R) -- (\Ah,-\R); \draw[black!45] (-\Ah,{-\R-\tw}) -- (\Ah,{-\R-\tw});
+  % ---- uniform attenuating cylinder, longer than the scanner -------------
+  \fill[cyan!10] (-\LL/2-0.9,-\rO) rectangle (\LL/2+0.55,\rO);
+  \draw[cyan!40!black,opacity=0.45] (-\LL/2-0.9,\rO)  -- (\LL/2+0.55,\rO);
+  \draw[cyan!40!black,opacity=0.45] (-\LL/2-0.9,-\rO) -- (\LL/2+0.55,-\rO);
+  \fill[cyan!16] (\LL/2+0.55,0) ellipse ({\eO} and {\rO});
+  \draw[cyan!40!black,opacity=0.45] (\LL/2+0.55,0) ellipse ({\eO} and {\rO});
+
+  \draw[black!30,densely dashed] (-\Ah,\R)        arc ( 90:-90:{\ee} and {\R});
+  \draw[black!30,densely dashed] (-\Ah,{\R+\tw})  arc ( 90:-90:{\eeo} and {\R+\tw});
+  \draw[black!45] (-\Ah,\R)       arc ( 90:270:{\ee} and {\R});
+  \draw[black!45] (-\Ah,{\R+\tw}) arc ( 90:270:{\eeo} and {\R+\tw});
+
+  % ---- accepted solid angle: theta_1 <= theta <= pi - theta_1 ------------
+  \fill[blue!12,opacity=0.75] (\zz,0) -- (\Ah,\R)  -- (\zfar,\R)  -- cycle;
+  \fill[blue!12,opacity=0.75] (\zz,0) -- (\Ah,-\R) -- (\zfar,-\R) -- cycle;
+
+  % ---- axis -------------------------------------------------------------
+  \draw[dash pattern=on 4pt off 2pt on 1pt off 2pt,black!55]
+        (-\LL/2-0.9,0) -- (\LL/2+1.0,0) node[right,font=\scriptsize,black!60] {$z$};
+  \draw[black!35,thin,densely dotted] (0,{-\R-\tw}) -- (0,{\R+\tw});
+  \node[font=\tiny,black!45,anchor=north] at (0,{-\R-\tw-0.04}) {$0$};
+
+  % ---- limiting LORs ----------------------------------------------------
+  \draw[blue!65!black,thick] (\zfar,-\R) -- (\Ah,\R);
+  \draw[blue!65!black,thick] (\zfar,\R)  -- (\Ah,-\R);
+  % the chord this LOR cuts through the attenuating cylinder
+  \draw[orange!80!black,line width=1.9pt] (\zin,\rO) -- (\zout,-\rO);
+  \node[orange!55!black,font=\scriptsize,anchor=east]
+        at ({\zz-\done*0.50/\R-0.30},0.50) {$\Dcyl/\sin\theta$};
+
+  % ---- near rim, drawn on top so the LORs terminate at the detector ------
+  \fill[black!8,even odd rule] (\Ah,0) ellipse ({\eeo} and {\R+\tw})
+                               (\Ah,0) ellipse ({\ee} and {\R});
+  \draw[black!45] (\Ah,0) ellipse ({\eeo} and {\R+\tw});
+  \draw[black!45] (\Ah,0) ellipse ({\ee} and {\R});
+
+  % ---- source point, theta_1 --------------------------------------------
+  \fill (\zz,0) circle (1.9pt);
+  \node[font=\scriptsize,anchor=north east] at (\zz+0.04,-0.08) {$z$};
+  \draw[black!70] (\zz+1.15,0) arc (0:\thone:1.15);
+  \node[font=\scriptsize] at ({\zz+1.45*cos(\thone/2)},{1.45*sin(\thone/2)}) {$\theta_1$};
+  % centroid of the upper shaded triangle sits at x = z, y = 2R/3
+  \node[font=\scriptsize,blue!45!black] at (\zz,{0.667*\R})
+        {$\theta_1\le\theta\le\pi-\theta_1$};
+
+  % ---- dimensions -------------------------------------------------------
+  \draw[<->,black!70] (-\Ah,0) -- (-\Ah,\R)
+        node[midway,fill=white,inner sep=1.5pt,font=\scriptsize] {$R$};
+  \draw[<->,cyan!45!black] (-\LL/2-0.55,-\rO) -- (-\LL/2-0.55,\rO)
+        node[midway,fill=white,inner sep=1.5pt,font=\scriptsize] {$\Dcyl$};
+  \draw[black!35,thin,densely dotted] (\zz,-0.1)  -- (\zz,{-\R-\tw-0.70});
+  \draw[black!35,thin,densely dotted] (\Ah,{-\R}) -- (\Ah,{-\R-\tw-0.70});
+  \draw[<->,black!70] (\zz,{-\R-\tw-0.55}) -- (\Ah,{-\R-\tw-0.55})
+        node[midway,fill=white,inner sep=1.5pt,font=\scriptsize] {$d_1(z)$};
+  \draw[<->,black!70] (-\Ah,{-\R-\tw-1.15}) -- (\Ah,{-\R-\tw-1.15})
+        node[midway,fill=white,inner sep=1.5pt,font=\scriptsize] {$\Lpet$};
+\end{tikzpicture}

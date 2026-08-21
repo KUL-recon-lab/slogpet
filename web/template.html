@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SLoG SNR&sup2; explorer</title>
+<style>
+:root{
+  --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink-2:#52514e;
+  --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7; --line:#e6e5df;
+  --s1:#2a78d6; --s2:#eda100; --s3:#d55181; --s4:#008300;
+  --accent:#2a78d6;
+}
+html[data-theme="dark"]{
+  --surface:#1a1a19; --page:#0d0d0d; --ink:#ffffff; --ink-2:#c3c2b7;
+  --muted:#898781; --grid:#2c2c2a; --axis:#383835; --line:#2c2c2a;
+  --s1:#3987e5; --s2:#c98500; --s3:#d55181; --s4:#008300;
+  --accent:#3987e5;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+h1{font-size:19px;margin:0 0 2px;font-weight:600}
+h2{font-size:13px;margin:0 0 8px;font-weight:600;letter-spacing:.02em;
+  text-transform:uppercase;color:var(--ink-2)}
+a{color:var(--accent)}
+header{padding:18px 22px 14px;border-bottom:1px solid var(--line);
+  background:var(--surface);display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+header .sub{color:var(--ink-2);font-size:13px;max-width:70ch}
+header .spacer{flex:1}
+main{display:grid;grid-template-columns:308px 1fr;gap:0;align-items:start}
+#side{padding:16px 18px;border-right:1px solid var(--line);background:var(--surface);
+  min-height:calc(100vh - 78px)}
+#content{padding:16px 22px 40px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px 10px;margin-bottom:16px}
+fieldset{border:0;padding:0;margin:0 0 16px}
+label{display:block;font-size:12px;color:var(--ink-2);margin:10px 0 3px}
+input[type=number],select,input[type=text]{width:100%;padding:5px 7px;font:inherit;
+  font-size:13px;color:var(--ink);background:var(--page);
+  border:1px solid var(--axis);border-radius:5px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.row{display:flex;gap:8px}.row>*{flex:1;min-width:0}
+button{font:inherit;font-size:13px;padding:7px 13px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--axis);background:var(--page);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+.seg{display:inline-flex;border:1px solid var(--axis);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:4px 11px;font-size:12px;background:transparent}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.pick{max-height:290px;overflow:auto;border:1px solid var(--line);border-radius:6px;
+  padding:5px 7px;background:var(--page)}
+.pick .grp{font-size:11px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--muted);margin:8px 0 3px}
+.pick label{display:flex;gap:7px;align-items:flex-start;margin:0;padding:3px 2px;
+  font-size:12.5px;color:var(--ink);cursor:pointer;line-height:1.35}
+.pick label:hover{background:var(--surface);border-radius:4px}
+.pick input{margin-top:2px;accent-color:var(--accent)}
+.swatch{width:9px;height:9px;border-radius:2px;flex:none;margin-top:4px}
+.hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1150px){.charts{grid-template-columns:1fr}main{grid-template-columns:1fr}
+  #side{border-right:0;border-bottom:1px solid var(--line);min-height:0}}
+.chead{display:flex;align-items:baseline;gap:12px;margin-bottom:2px}
+.chead h2{margin:0}.chead .spacer{flex:1}
+figure{margin:0}
+figcaption{font-size:12px;color:var(--ink-2);margin-top:6px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 2px;font-size:12px}
+.legend .it{display:flex;align-items:center;gap:6px;color:var(--ink-2)}
+.legend svg{width:26px;height:8px;flex:none}
+table{border-collapse:collapse;width:100%;font-size:12.5px;
+  font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:5px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--ink-2);font-size:11.5px;
+  letter-spacing:.02em;border-bottom:1px solid var(--axis);vertical-align:bottom}
+th:first-child,td:first-child{text-align:left}
+td.name{display:flex;align-items:center;gap:7px}
+tbody tr:hover{background:var(--page)}
+.tip{position:fixed;pointer-events:none;background:var(--surface);color:var(--ink);
+  border:1px solid var(--axis);border-radius:6px;padding:7px 9px;font-size:12px;
+  box-shadow:0 4px 14px rgba(0,0,0,.13);opacity:0;transition:opacity .08s;z-index:9;
+  font-variant-numeric:tabular-nums}
+.tip .t{color:var(--ink-2);margin-bottom:4px;font-size:11.5px}
+.tip .r{display:flex;align-items:center;gap:6px;margin-top:2px}
+.tip .k{width:8px;height:8px;border-radius:2px;flex:none}
+.tip .v{margin-left:auto;font-weight:600;padding-left:14px}
+#boot{padding:40px 22px;color:var(--ink-2)}
+.bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:9px;
+  max-width:320px}
+.bar>div{height:100%;background:var(--accent);width:0;transition:width .2s}
+.warn{border-left:3px solid var(--s2);padding-left:11px;font-size:12.5px;color:var(--ink-2)}
+details{font-size:12.5px;color:var(--ink-2)}
+details summary{cursor:pointer;color:var(--accent)}
+code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--page);
+  padding:1px 4px;border-radius:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>SLoG SNR&sup2; explorer</h1>
+    <div class="sub">Hotelling detectability of a scaled Laplacian of a Gaussian,
+    for any PET geometry, task size and scan length. Runs the same Python as the
+    paper, in your browser &mdash; nothing is sent anywhere.</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="seg" role="group" aria-label="colour theme">
+    <button id="th-l" aria-pressed="true">Light</button>
+    <button id="th-d" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<div id="boot">
+  <div id="bootmsg">Loading Python, NumPy and SciPy&hellip; (about 30&nbsp;MB, once)</div>
+  <div class="bar"><div id="bootbar"></div></div>
+</div>
+
+<main id="app" hidden>
+  <div id="side">
+    <fieldset>
+      <h2>Task</h2>
+      <label for="fo">SLoG size <b id="fo-v">5.0</b> mm FWHM</label>
+      <input type="range" id="fo" min="1" max="25" step="0.5" value="5">
+      <label for="dcyl">Object diameter <b id="dcyl-v">30</b> cm</label>
+      <input type="range" id="dcyl" min="10" max="45" step="1" value="30">
+      <label for="smax">Scan length range 5 &ndash; <b id="smax-v">200</b> cm</label>
+      <input type="range" id="smax" min="40" max="250" step="10" value="200">
+      <div class="row">
+        <div><label for="npts">Points</label>
+          <select id="npts"><option>11</option><option selected>21</option>
+          <option>31</option><option>41</option></select></div>
+        <div><label for="sat">Profile at <b id="sat-v">100</b> cm</label>
+          <input type="range" id="sat" min="5" max="200" step="5" value="100"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <h2>Configurations</h2>
+      <div class="pick" id="pick"></div>
+      <div class="hint" id="pickhint"></div>
+      <details id="custom" style="margin-top:10px">
+        <summary>Add a system of your own</summary>
+        <label for="c-from">Start from</label>
+        <select id="c-from"></select>
+        <label for="c-name">Name</label>
+        <input type="text" id="c-name" value="my system">
+        <div class="row">
+          <div><label for="c-L">L<sub>PET</sub> (cm)</label>
+            <input type="number" id="c-L" step="1" min="5"></div>
+          <div><label for="c-D">D<sub>PET</sub> (cm)</label>
+            <input type="number" id="c-D" step="0.5" min="30"></div>
+        </div>
+        <div class="row">
+          <div><label for="c-fy">F<sub>y</sub> (mm)</label>
+            <input type="number" id="c-fy" step="0.1" min="0.5"></div>
+          <div><label for="c-fz">F<sub>z</sub> (mm)</label>
+            <input type="number" id="c-fz" step="0.1" min="0.5"></div>
+        </div>
+        <div class="row">
+          <div><label for="c-ctr">CTR (ps, blank = no TOF)</label>
+            <input type="number" id="c-ctr" step="1" min="0"></div>
+          <div><label for="c-eps">&epsilon;</label>
+            <input type="number" id="c-eps" step="0.01" min="0.01" max="1"></div>
+        </div>
+        <label for="c-mrd">Max ring difference (cm, blank = none)</label>
+        <input type="number" id="c-mrd" step="1" min="1">
+        <button id="c-add" style="width:100%;margin-top:10px">Add to the list</button>
+        <div class="hint">&epsilon; is the detector-pair efficiency: the fraction of
+        the pairs reaching the detector that are recorded. Copy it from a system with
+        the same crystal &mdash; it barely depends on the axial length.</div>
+      </details>
+    </fieldset>
+
+    <button class="primary" id="go" style="width:100%">Compute</button>
+    <div class="bar" id="prog" hidden><div id="progbar"></div></div>
+    <div class="hint" id="status"></div>
+  </div>
+
+  <div id="content">
+    <div class="charts">
+      <figure class="card">
+        <div class="chead"><h2>Detectability vs scan length</h2><div class="spacer"></div>
+          <div class="seg" role="group" aria-label="y axis scale">
+            <button id="sc-lin" aria-pressed="true">Linear</button>
+            <button id="sc-log" aria-pressed="false">Log</button></div></div>
+        <div id="chart1"></div>
+        <div class="legend" id="leg1"></div>
+        <figcaption id="cap1"></figcaption>
+      </figure>
+      <figure class="card">
+        <div class="chead"><h2>Along the axis, at the chosen scan length</h2></div>
+        <div id="chart2"></div>
+        <div class="legend" id="leg2"></div>
+        <figcaption id="cap2"></figcaption>
+      </figure>
+    </div>
+
+    <div class="card">
+      <div class="chead"><h2>Numbers</h2><div class="spacer"></div>
+        <span class="hint" id="tabnote"></span></div>
+      <div style="overflow-x:auto"><table id="tab"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>What is being computed</h2>
+      <p style="margin-top:0;color:var(--ink-2);font-size:12.5px;max-width:80ch">
+      SNR&sup2; = <i>T</i>&nbsp;&times;&nbsp;[<i>S&#775;</i>&sup2;&sigma;<sub>o</sub>&sup3;/(16&pi;&radic;&pi;
+      <i>B&#775;</i>)]&nbsp;&times;&nbsp;<i>&epsilon;&nbsp;&eta;<sub>N</sub></i>(<i>z</i>)&nbsp;&times;&nbsp;<i>r</i>.
+      The first two factors describe the patient and the acquisition time and are
+      the same for every system compared, so the plots show the system part,
+      <i>&epsilon;&nbsp;&eta;<sub>N</sub>&nbsp;r&nbsp;&sigma;<sub>o</sub></i>&sup3;,
+      in units of <i>T&nbsp;S&#775;</i>&sup2;/(16&pi;&radic;&pi;<i>B&#775;</i>).
+      <i>&eta;<sub>N</sub></i> is the axial sensitivity profile of the optimised
+      multi-bed acquisition; <i>r</i> is the resolution factor, in its non-TOF form
+      for systems without time of flight, which is why those depend on the object
+      diameter. Curves are the minimum over the scan range.</p>
+      <details id="prov"><summary>Sources for the published systems</summary>
+        <div id="provbody" style="margin-top:8px"></div></details>
+    </div>
+  </div>
+</main>
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+<script>
+/*__FILES__*/
+</script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.28.3/full/pyodide.js"></script>
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "Four generic detector designs and the axial lengths they are built in, as",
+    "used in Figure 7.  Deliberately vendor-neutral: each design is defined by",
+    "its crystal, its efficiency, its timing and its spatial resolution, and each",
+    "is offered in the lengths that exist or are plausible for it.",
+    "",
+    "The numbers are rounded representatives of the corresponding rows of",
+    "systems.json, not a re-statement of any one product.  'style' is a hint for",
+    "plotting only.  Lengths in mm, F_t in mm FWHM (null = no time of flight)."
+  ],
+  "groups": [
+    {
+      "id": "A", "colour": "#2a78d6",
+      "crystal": "LSO", "crystal_size": [3.2, 3.2, 20.0],
+      "epsilon": 0.28, "F_t": 32.0, "F_y": 3.6, "F_z": 3.6, "D_pet": 820.0,
+      "based_on": ["Biograph Vision 600", "Biograph Vision Quadra"],
+      "configurations": [
+        {"L_pet": 261.0,  "style": "short"},
+        {"L_pet": 1060.0, "style": "long"},
+        {"L_pet": 1060.0, "L_mrd": 282.0, "style": "mrd"}
+      ]
+    },
+    {
+      "id": "B", "colour": "#eda100",
+      "crystal": "LYSO", "crystal_size": [3.95, 5.3, 25.0],
+      "epsilon": 0.36, "F_t": 57.0, "F_y": 4.2, "F_z": 4.5, "D_pet": 744.0,
+      "based_on": ["Discovery MI (4 rings)", "Discovery MI (6 rings)"],
+      "configurations": [
+        {"L_pet": 200.0, "style": "short2"},
+        {"L_pet": 300.0, "style": "short"}
+      ]
+    },
+    {
+      "id": "C", "colour": "#d55181",
+      "crystal": "BGO", "crystal_size": [4.1, 4.1, 30.0],
+      "epsilon": 0.50, "F_t": null, "F_y": 4.3, "F_z": 4.4, "D_pet": 725.0,
+      "based_on": ["Omni Legend 32", "Omni 128"],
+      "configurations": [
+        {"L_pet": 320.0,  "style": "short"},
+        {"L_pet": 1280.0, "style": "long"}
+      ]
+    },
+    {
+      "id": "D", "colour": "#008300",
+      "crystal": "LYSO", "crystal_size": [2.76, 2.76, 18.1],
+      "epsilon": 0.20, "F_t": 28.0, "F_y": 2.9, "F_z": 2.8, "D_pet": 788.0,
+      "based_on": ["uMI Panorama", "uMI Panorama GS"],
+      "configurations": [
+        {"L_pet": 351.0,  "style": "short2"},
+        {"L_pet": 700.0,  "style": "short",
+         "note": "Hypothetical: no system of this length exists with this detector."},
+        {"L_pet": 1481.0, "style": "long"}
+      ]
+    }
+  ],
+  "styles": {
+    "_comment": "solid = long (>1 m); every broken style is a short system, except the dash-dot, which is a long system run with a ring-difference limit",
+    "long": "-",
+    "short": [0, [4.5, 2.0]],
+    "short2": [0, [1.2, 1.6]],
+    "mrd": [0, [6.0, 1.6, 1.2, 1.6]]
+  }
+}

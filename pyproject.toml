@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slogpet"
+version = "0.1.0"
+description = "SLoG detectability of cylindrical PET systems"
+readme = "slogpet/README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  {name = "Johan Nuyts"},
+  {name = "Seyed Amir Zamanpour"},
+  {name = "Georg Schramm", email = "georg.schramm@kuleuven.be"},
+]
+dependencies = ["numpy>=1.22", "scipy>=1.8"]
+
+[project.optional-dependencies]
+paper = ["matplotlib>=3.5"]
+
+[tool.setuptools]
+packages = ["slogpet"]
+
+[tool.setuptools.package-data]
+slogpet = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: Monte Carlo and Eq. (53) checks; minutes, not seconds",
+]
+addopts = "-ra -m 'not slow'"
