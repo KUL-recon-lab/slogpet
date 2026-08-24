@@ -1,14 +1,20 @@
 """Figure 1: the two hypotheses and their difference, at perfect resolution and
 after smoothing with a kernel of the SLoG size."""
+from typing import Optional, Tuple, TYPE_CHECKING
+
 import numpy as np
 
-from .style import use_agg
+from .style import figure_backend, finish, AGG_RC
 from .config import out
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 DEFAULT = out("fig-slog2d.pdf")
 
 
-def make(path=DEFAULT, smooth_frac=1.0, contrast=0.35):
+def make(path: Optional[str] = DEFAULT, smooth_frac: float = 1.0,
+         contrast: float = 0.35) -> "Figure":
     """Transaxial cuts through the two hypotheses and through their difference.
 
     Nuyts et al. Eq. (9) decomposes the SLoG exactly into two strictly positive blobs of
@@ -23,7 +29,7 @@ def make(path=DEFAULT, smooth_frac=1.0, contrast=0.35):
     SLoG -> so^5/u (r^2/u^2 - 3) G3(r,u)/u.  The objects are radially symmetric, so one cut
     through the centre says everything.
     """
-    plt = use_agg()
+    plt = figure_backend(path, AGG_RC)
 
     so = 1.0
     L = 4.0
@@ -31,10 +37,10 @@ def make(path=DEFAULT, smooth_frac=1.0, contrast=0.35):
     X, Y = np.meshgrid(g, g)
     r2 = X**2 + Y**2
 
-    def G3(r2_, s):
+    def G3(r2_: np.ndarray, s: float) -> np.ndarray:
         return np.exp(-0.5*r2_/(s*s))/((2*np.pi)**1.5 * s**3)
 
-    def triple(s_ker):
+    def triple(s_ker: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """hot, hollow and SLoG after smoothing with a 3-D Gaussian of width s_ker."""
         u = np.sqrt(so*so + s_ker*s_ker)
         hot  = 3.0*so**3 * G3(r2, u)
@@ -85,9 +91,7 @@ def make(path=DEFAULT, smooth_frac=1.0, contrast=0.35):
     for c in (cb1, cb2):
         c.outline.set_linewidth(0.5)
         c.ax.tick_params(width=0.5, labelsize=7)
-    fig.savefig(path, bbox_inches="tight", pad_inches=0.02)
-    plt.close(fig)
-    print("wrote", path)
+    return finish(fig, path, bbox_inches="tight", pad_inches=0.02)
 
 
 if __name__ == "__main__":

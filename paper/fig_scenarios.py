@@ -3,18 +3,24 @@
 The sweep over scan length is shared with the printed table of the same numbers,
 which is what the text of the last section quotes, so both live here.
 """
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
 import numpy as np
 
 from slogpet import Task, axial_profile, optimal_protocol, snr2_value
 
-from .style import use_pgf, SCENARIO_RC
+from .style import figure_backend, finish, SCENARIO_RC
 from .config import (out, GROUPS, STYLES, SCENARIOS, SLOG_FWHM, SCEN_CYLS,
                      scen_label, group_desc)
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
+    from numpy.typing import NDArray
 
 DEFAULT = out("fig-scenarios.pgf")
 
 
-def scenario_data(Ss):
+def scenario_data(Ss: "NDArray[np.float64]") -> Dict[Tuple[int, float], "NDArray[np.float64]"]:
     """min_z eta_N for every (scenario, D_cyl, S); the protocol does not depend on F_o."""
     out = {}
     for k, (grp, sty, sc) in enumerate(SCENARIOS):
@@ -25,8 +31,9 @@ def scenario_data(Ss):
     return out
 
 
-def make(path=DEFAULT, nS=41):
-    plt = use_pgf(**SCENARIO_RC)
+def make(path: Optional[str] = DEFAULT, nS: int = 41) -> "Figure":
+    """Pass ``path=None`` to open the figure in a window instead of writing it."""
+    plt = figure_backend(path, **SCENARIO_RC)
     from matplotlib.lines import Line2D
 
     Ss = np.linspace(50.0, 2000.0, nS)
@@ -55,7 +62,7 @@ def make(path=DEFAULT, nS=41):
 
     # legend: one column per detector design, headed by the design
     blank = Line2D([], [], ls="none")
-    def r_line(g):
+    def r_line(g: int) -> str:
         """The resolution factor of this detector at the two SLoG sizes.  For a TOF
         design r is independent of the object; for a non-TOF one it is not, so both
         cylinder diameters are given."""
@@ -67,7 +74,7 @@ def make(path=DEFAULT, nS=41):
         return (r"$r=%.3f$, $%.3f$ ($D_{\mathrm{cyl}}{=}20$); $%.3f$, $%.3f$ ($30$)"
                 % (v[0][0], v[1][0], v[0][1], v[1][1]))
 
-    def block(g):
+    def block(g: int) -> List[Tuple[Any, str]]:
         gcol = GROUPS[g].colour
         out = [(blank, "\n".join(group_desc(GROUPS[g]) + (r_line(g),)))]
         for grp, sty, sc in SCENARIOS:
@@ -87,11 +94,10 @@ def make(path=DEFAULT, nS=41):
                fontsize=7.5, handlelength=2.8, handletextpad=0.5,
                columnspacing=1.2, labelspacing=0.32, bbox_to_anchor=(0.52, -0.004))
     fig.tight_layout(pad=0.3, h_pad=0.5, w_pad=1.0, rect=(0.015, 0.30, 1, 1))
-    fig.savefig(path)
-    print("wrote", path)
+    return finish(fig, path)
 
 
-def print_numbers(nS=41):
+def print_numbers(nS: int = 41) -> None:
     """Numbers behind the scenario figure, for writing the text."""
     Ss = np.linspace(50.0, 2000.0, nS)
     minEta = scenario_data(Ss)

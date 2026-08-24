@@ -1,17 +1,24 @@
 """Figure 5: why the best bed count is not a smooth function of the scan length."""
+from typing import Optional, Sequence, TYPE_CHECKING
+
 import numpy as np
 
 from slogpet import (sample_single_bed_profile, best_spacing_for_n_beds,
                      coverage, tile_beds)
 
-from .style import use_pgf, SEQ, HIGHLIGHT
+from .style import figure_backend, finish, SEQ, HIGHLIGHT
 from .config import out, D_PET
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 DEFAULT = out("fig-ripple.pgf")
 
 
-def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0,
-         max_peak_to_trough=None, profile_counts=(1, 2, 4, 5)):
+def make(path: Optional[str] = DEFAULT, L_pet: float = 1000.0,
+         D_cyl: float = 200.0, S: float = 1500.0,
+         max_peak_to_trough: Optional[float] = None,
+         profile_counts: Sequence[int] = (1, 2, 4, 5)) -> "Figure":
     """Why the best N is not a smooth function of S: the tiled profile ripples, and how
     much it ripples depends on N in a way that is not monotone.
 
@@ -29,7 +36,7 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0,
     ``profile_counts`` are the bed counts drawn on the right; any that the limit
     rules out are replaced by the next feasible ones.
     """
-    plt = use_pgf(**{"legend.fontsize": 7.5})
+    plt = figure_backend(path, **{"legend.fontsize": 7.5})
     profile = sample_single_bed_profile(L_pet, D_PET, D_cyl)
     Ns = list(range(1, 15))
     res = {N: best_spacing_for_n_beds(profile, L_pet, S, N,
@@ -114,7 +121,7 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0,
         p = tile_beds(profile, N, d, Z)
         inr = np.abs(Z) <= S / 2
         lbl = (r"$N=1$ (single bed)" if N == 1 else
-               r"$N=%d$, %.0f\%% overlap" % (N, 100 * (1 - d / L_pet)))
+               r"$N=%d$, $%.0f\%%$ overlap" % (N, 100 * (1 - d / L_pet)))
         a3.plot(Z / 10, p, color=col, lw=1.0, ls=("--" if N == 1 else "-"), label=lbl)
         a3.plot(Z[inr][np.argmin(p[inr])] / 10, p[inr].min(), "o", color=col, ms=3.5)
         a3.axhline(p[inr].min(), color=col, lw=0.5, ls=(0, (3, 3)))
@@ -129,8 +136,7 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0,
     a3.legend(loc="lower right", frameon=True, framealpha=1.0, handlelength=1.4,
               borderpad=0.3, labelspacing=0.25)
 
-    fig.savefig(path)
-    print("wrote", path)
+    return finish(fig, path)
 
 
 if __name__ == "__main__":

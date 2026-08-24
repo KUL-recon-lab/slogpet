@@ -1,4 +1,6 @@
 """Table 2: detector-pair efficiencies and resolution factors of current systems."""
+from typing import List
+
 import numpy as np
 
 from slogpet import Task
@@ -8,9 +10,9 @@ from .config import out, SYSTEMS, SLOG_SIZES, D_CYL_TAB, _size, _window
 DEFAULT = out("table.tex")
 
 
-def write(path=DEFAULT, L_s=700.0):
+def write(path: str = DEFAULT, L_s: float = 700.0) -> str:
     """Detector-pair efficiencies and resolution factors of current systems."""
-    rows = []
+    rows: List[str] = []
     prev_vendor = None
     dash = "---"
     for sc in SYSTEMS:
@@ -55,6 +57,7 @@ def write(path=DEFAULT, L_s=700.0):
         r"\midrule"]
     open(path, "w").write("\n".join(header + rows + [r"\bottomrule", r"\end{tabular}"]) + "\n")
     print("wrote", path)
+    return path
 
 
 if __name__ == "__main__":

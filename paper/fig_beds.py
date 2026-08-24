@@ -1,17 +1,23 @@
 """Figure 6: the optimised multi-bed acquisition as a function of scan length --
 the minimum of eta_N, the bed count, and the overlap."""
+from typing import Optional, TYPE_CHECKING
+
 import numpy as np
 
 from slogpet import sample_single_bed_profile, optimise_bed_positions
 
-from .style import use_pgf, LENGTH_RAMP
+from .style import figure_backend, finish, LENGTH_RAMP
 from .config import out, D_PET, SCANNERS, SCANLEN, CYLS
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 DEFAULT = out("fig-beds.pgf")
 
 
-def make(path=DEFAULT):
-    plt = use_pgf()
+def make(path: Optional[str] = DEFAULT) -> "Figure":
+    """Pass ``path=None`` to open the figure in a window instead of writing it."""
+    plt = figure_backend(path)
     colours = LENGTH_RAMP
     Ss = np.concatenate([np.arange(5., 60., 2.5), np.arange(60., 205., 5.)])*10
     fig, axes = plt.subplots(4, 2, figsize=(6.0, 8.0), sharex=True)
@@ -22,7 +28,7 @@ def make(path=DEFAULT):
             best = [optimise_bed_positions(profile, L_pet, S) for S in Ss]
             M = [b.coverage.min_eta for b in best]
             axes[0, col].plot(Ss/10, M, color=colours[L_pet],
-                              label=r"$L_{\mathrm{PET}}=%s$\,cm" % lab)
+                              label=r"$L_{\mathrm{PET}}=%s\,$cm" % lab)
             axes[1, col].plot(Ss/10, M, color=colours[L_pet])
             axes[2, col].step(Ss/10, [b.n_beds for b in best],
                               color=colours[L_pet], where="post")
@@ -37,19 +43,18 @@ def make(path=DEFAULT):
             axes[r, col].grid(True, lw=0.4, color="0.85")
             for S in SCANLEN:
                 axes[r, col].axvline(S/10, color="0.55", lw=0.6, ls=(0, (4, 3)))
-    axes[0, 0].set_ylabel(r"$\min_{|z|\le S/2}\eta_N(z)$" "\n" r"(linear)")
-    axes[1, 0].set_ylabel(r"$\min_{|z|\le S/2}\eta_N(z)$" "\n" r"(logarithmic)")
+    axes[0, 0].set_ylabel(r"$\min_{|z|\leq S/2}\eta_N(z)$" "\n" r"(linear)")
+    axes[1, 0].set_ylabel(r"$\min_{|z|\leq S/2}\eta_N(z)$" "\n" r"(logarithmic)")
     axes[2, 0].set_ylabel(r"optimal $N$")
-    axes[3, 0].set_ylabel(r"optimal overlap (\%)")
+    axes[3, 0].set_ylabel(r"optimal overlap ($\%$)")
     from matplotlib.lines import Line2D
     handles = [Line2D([], [], color=colours[L], lw=1.1,
-                      label=r"$L_{\mathrm{PET}}=%s$\,cm" % lab)
+                      label=r"$L_{\mathrm{PET}}=%s\,$cm" % lab)
                for L, lab in SCANNERS]
     axes[2, 0].legend(handles=handles, loc="upper left", frameon=True,
                       framealpha=1.0, handlelength=1.6)
     fig.tight_layout(pad=0.3, h_pad=0.5, w_pad=0.8)
-    fig.savefig(path)
-    print("wrote", path)
+    return finish(fig, path)
 
 
 if __name__ == "__main__":

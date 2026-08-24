@@ -53,7 +53,26 @@ Everything lands in `manuscript/`, next to the `main.tex` that inputs it:
 | `paper/fig_beds.py` | `fig-beds.pgf` (Figure 6) |
 | `paper/fig_scenarios.py` | `fig-scenarios.pgf` (Figure 7) |
 | `paper/config.py` | what the paper plots, and its LaTeX spellings |
-| `paper/style.py` | matplotlib settings |
+| `paper/style.py` | matplotlib settings, and where a figure goes |
+
+### Looking at a figure instead of printing it
+
+Every `make()` takes `path=None`, which draws the figure in a window and returns
+it instead of writing a file -- the same sizes, colours and line widths, and the
+same labels, typeset by LaTeX if there is one on the PATH and by matplotlib's
+mathtext if not:
+
+    pixi run -e explore ipython
+
+    In [1]: from paper.fig_ripple import make
+    In [2]: fig = make(None)                          # the printed figure
+    In [3]: fig = make(None, max_peak_to_trough=1.25) # with a ripple limit
+    In [4]: fig.axes[1].set_ylim(1.0, 1.3)
+
+    python3 make_all.py --show          # or all of them at once, writing nothing
+
+The `explore` environment exists because `matplotlib-base`, which is all the
+paper build needs, has no window backend at all.
 
 `make_figures.py` is now a shim that forwards to `make_all.py`; it can be deleted.
 
@@ -69,12 +88,13 @@ derived quantities. See `web/README.md`.
 ## Environments
 
 Dependencies are managed with [pixi](https://pixi.sh); `pixi.toml` explains why
-there are three environments rather than one.
+there are four environments rather than one.
 
-    pixi run test          # the fast suite (~2 s)
-    pixi run test-all      # also Monte Carlo and Eq. (53)
-    pixi run -e paper pdf  # regenerate every figure, then build the manuscript
-    pixi run -e web web    # regenerate web/index.html
+    pixi run test              # the fast suite (~2 s)
+    pixi run test-all          # also Monte Carlo and Eq. (53)
+    pixi run -e paper pdf      # regenerate every figure, then build the manuscript
+    pixi run -e explore show   # draw the figures on screen instead
+    pixi run -e web web        # regenerate web/index.html
 
 TeX is deliberately *not* a pixi dependency: conda-forge's `texlive-core` ships
 the binaries with an empty texmf tree, so it can typeset neither this document
