@@ -10,7 +10,8 @@ from .config import out, D_PET
 DEFAULT = out("fig-ripple.pgf")
 
 
-def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
+def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0,
+         max_peak_to_trough=None, profile_counts=(1, 2, 4, 5)):
     """Why the best N is not a smooth function of S: the tiled profile ripples, and how
     much it ripples depends on N in a way that is not monotone.
 
@@ -18,14 +19,39 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
     the range and on average -- the two pull in opposite directions, since a
     single bed has the highest mean of all and a minimum of zero.  Left, bottom:
     how uneven the result is.  Right: the profiles those numbers come from.
+
+    ``max_peak_to_trough`` draws the same figure under a limit on how uneven the
+    profile may be.  Bed counts that cannot meet it disappear from the left-hand
+    panels, and those that can only meet it at a different spacing are shown at
+    that spacing -- so the figure shows what the limit costs.  The default, None,
+    imposes no limit and is what the paper prints.
+
+    ``profile_counts`` are the bed counts drawn on the right; any that the limit
+    rules out are replaced by the next feasible ones.
     """
     plt = use_pgf(**{"legend.fontsize": 7.5})
     profile = sample_single_bed_profile(L_pet, D_PET, D_cyl)
     Ns = list(range(1, 15))
-    res = {N: best_spacing_for_n_beds(profile, L_pet, S, N) for N in Ns}
-    cov = {N: coverage(profile, N, res[N].spacing_mm, S) for N in Ns}
-    best = max(c.min_eta for c in cov.values())
-    Nrep = next(N for N in Ns if cov[N].min_eta >= 0.97 * best)
+    res = {N: best_spacing_for_n_beds(profile, L_pet, S, N,
+                                      max_peak_to_trough=max_peak_to_trough)
+           for N in Ns}
+    feasible = [N for N in Ns if res[N] is not None]
+    if not feasible:
+        raise ValueError("no bed count can keep max/min below %.3f"
+                         % max_peak_to_trough)
+    cov = {N: coverage(profile, N, res[N].spacing_mm, S) for N in feasible}
+    best = max(cov[N].min_eta for N in feasible)
+    Nrep = next(N for N in feasible if cov[N].min_eta >= 0.97 * best)
+
+    # the profiles to draw: those asked for that survive the limit, topped up
+    # with the next feasible counts so the panel keeps its four curves
+    shown = [N for N in profile_counts if N in feasible]
+    for N in feasible:
+        if len(shown) >= len(profile_counts):
+            break
+        if N not in shown:
+            shown.append(N)
+    shown = sorted(shown)
 
     # constrained layout, not tight_layout: the right-hand panel spans both rows,
     # which tight_layout cannot handle
@@ -38,10 +64,10 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
 
     # ---- what each bed count achieves ------------------------------------
     a1.axhspan(0.97 * best, best, color="0.88", zorder=0)
-    a1.plot(Ns, [cov[N].mean_eta for N in Ns], "s--", color=SEQ[1], ms=3.2,
-            label=r"mean over the range")
-    a1.plot(Ns, [cov[N].min_eta for N in Ns], "o-", color=SEQ[3], ms=4,
-            label=r"minimum over the range")
+    a1.plot(feasible, [cov[N].mean_eta for N in feasible], "s--", color=SEQ[1],
+            ms=3.2, label=r"mean over the range")
+    a1.plot(feasible, [cov[N].min_eta for N in feasible], "o-", color=SEQ[3],
+            ms=4, label=r"minimum over the range")
     a1.plot([Nrep], [cov[Nrep].min_eta], "o", color=HIGHLIGHT, ms=7, mfc="none", mew=1.8)
     a1.set_ylabel(r"$\eta_N$")
     a1.grid(True, lw=0.4, color="0.85")
@@ -50,9 +76,11 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
     a1.annotate(r"within $3\,\%$ of best", xy=(10.5, 0.985 * best),
                 xytext=(9.0, 0.50 * best), fontsize=7.5, color="0.35", ha="center",
                 arrowprops=dict(arrowstyle="->", lw=0.6, color="0.55"))
-    a1.annotate(r"range not covered", xy=(1.06, 0.02 * best), xytext=(3.6, 0.28 * best),
-                fontsize=7.5, color="#7a7a7a", va="center", ha="center",
-                arrowprops=dict(arrowstyle="->", lw=0.6, color="#7a7a7a"))
+    if 1 in feasible and cov[1].min_eta == 0.0:
+        a1.annotate(r"range not covered", xy=(1.06, 0.02 * best),
+                    xytext=(3.6, 0.28 * best), fontsize=7.5, color="#7a7a7a",
+                    va="center", ha="center",
+                    arrowprops=dict(arrowstyle="->", lw=0.6, color="#7a7a7a"))
     a1.legend(loc="upper right", frameon=True, framealpha=1.0, handlelength=1.8,
               borderpad=0.3, labelspacing=0.22, borderaxespad=0.4)
     a1.tick_params(labelbottom=False)
@@ -60,7 +88,7 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
     # ---- how uneven it is --------------------------------------------------
     # N = 1 leaves part of the range uncovered, so its ratio is infinite and is
     # left out rather than drawn off the top of the panel.
-    covered = [N for N in Ns if cov[N].min_eta > 0]
+    covered = [N for N in feasible if cov[N].min_eta > 0]
     a2.axhline(1.0, color="0.55", lw=0.6, ls=(0, (1, 2)))
     a2.plot(covered, [cov[N].peak_to_trough for N in covered], "o-",
             color=SEQ[2], ms=4)
@@ -69,6 +97,11 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
     a2.set_xlabel("number of bed positions $N$")
     a2.set_ylabel(r"$\max\eta_N\,/\,\min\eta_N$")
     a2.grid(True, lw=0.4, color="0.85")
+    if max_peak_to_trough is not None:
+        a2.axhline(max_peak_to_trough, color=HIGHLIGHT, lw=0.9, ls=(0, (4, 2)))
+        a2.text(0.985, max_peak_to_trough, "limit", fontsize=7.5, color="0.35",
+                ha="right", va="top",
+                transform=a2.get_yaxis_transform(which="grid"))
     a2.set_ylim(bottom=1.0)
     a2.set_xticks(Ns[::2])
 
@@ -76,7 +109,7 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
     Zw = 2.0 * S / 3.0                                 # plot out to +/- 100 cm
     Z = np.linspace(-Zw, Zw, 1601)
     a3.axvspan(-S / 20, S / 20, color="0.90", zorder=0)
-    for N, col in zip((1, 2, 4, 5), SEQ):
+    for N, col in zip(shown, SEQ):
         d = res[N].spacing_mm
         p = tile_beds(profile, N, d, Z)
         inr = np.abs(Z) <= S / 2
