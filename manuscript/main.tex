@@ -725,10 +725,16 @@ realistic profiles follow approximately in Figure~\ref{fig:beds}.}
 \centering
 \input{fig-ripple.pgf}
 \caption{The bed-optimisation problem of Eq.~\eqref{eq:maxmin}, for
-$\Lpet=100\,\mathrm{cm}$, $\Dcyl=20\,\mathrm{cm}$ and $S=150\,\mathrm{cm}$. \textbf{Left:}
-the achievable minimum of $\eta_N$ against $N$, each $N$ at its own optimal spacing; the
-shaded band is within $3\,\%$ of the best and the circled point is the smallest $N$ inside
-it. \textbf{Right:} the corresponding profiles $\eta_N(z)$, with each minimum marked.}
+$\Lpet=100\,\mathrm{cm}$, $\Dcyl=20\,\mathrm{cm}$ and $S=150\,\mathrm{cm}$.
+\textbf{Top left:} what each $N$ achieves over the scan range, at its own optimal spacing:
+the minimum, which Eq.~\eqref{eq:maxmin} maximises, and the mean, which sets the total
+number of counts. The two pull in opposite directions, since a single bed has the highest
+mean of all and a minimum of zero. The shaded band is within $3\,\%$ of the best minimum
+and the circled point is the smallest $N$ inside it. \textbf{Bottom left:} how uneven the
+result is, as the ratio of the best to the worst point of the range; $N=1$ is omitted, its
+ratio being infinite. Only $N=2$, $3$ and $5$ fall inside the band, and the tolerance
+picks the least uniform of them: fewer beds are bought at the price of a more rippled
+profile. \textbf{Right:} the profiles behind those numbers, with each minimum marked.}
 \label{fig:ripple}
 \end{figure}
 

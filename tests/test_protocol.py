@@ -215,3 +215,18 @@ def test_overlap_percent_matches_the_spacing(profile):
     assert got.overlap_percent(LP) == pytest.approx(
         100.0 * (1.0 - got.spacing_mm / LP), rel=1e-12)
     assert optimise_bed_positions(profile, LP, 100.0).overlap_percent(LP) is None
+
+
+def test_peak_to_trough_is_infinite_when_the_range_is_not_covered(profile):
+    """One bed cannot reach the ends of a range longer than the detector, so the
+    worst point is zero and the ratio is infinite rather than merely large."""
+    uncovered = coverage(profile, 1, 0.0, 2.0 * LP)
+    assert uncovered.min_eta == 0.0
+    assert np.isinf(uncovered.peak_to_trough)
+    assert np.isfinite(uncovered.ripple)          # this one stays usable
+
+
+def test_peak_to_trough_is_one_for_a_flat_profile(profile):
+    """A range small enough to sit on the flat top of a single bed barely ripples."""
+    c = coverage(profile, 1, 0.0, 20.0)
+    assert 1.0 <= c.peak_to_trough < 1.01

@@ -249,9 +249,17 @@ class ScanCoverage(NamedTuple):
     """The best point in the range, at the crest of the ripple."""
 
     @property
+    def peak_to_trough(self) -> float:
+        """``max / min``: how many times more sensitive the best point of the
+        range is than the worst.  One would be perfectly flat; infinite means
+        part of the range is not covered at all."""
+        return self.max_eta / self.min_eta if self.min_eta > 0 else np.inf
+
+    @property
     def ripple(self) -> float:
-        """Peak-to-trough spread relative to the mean.  Zero would be a perfectly
-        flat profile across the range."""
+        """Peak-to-trough spread relative to the mean.  Unlike ``peak_to_trough``
+        this stays finite when part of the range is uncovered, which makes it the
+        better choice for a plot that has to include that case."""
         return (self.max_eta - self.min_eta) / self.mean_eta if self.mean_eta else np.nan
 
 
