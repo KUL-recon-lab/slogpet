@@ -300,3 +300,58 @@ def test_the_flattest_spacing_is_at_least_as_even_as_any_other(profile):
         covered = low > 0
         assert flat.peak_to_trough == pytest.approx(
             (high[covered] / low[covered]).min(), rel=1e-12)
+
+
+# ------------------------------------- short detectors, where the coarse pass
+# used to run out of candidates
+def _exhaustive_minimum(profile, L_pet, S, N):
+    """max over every spacing of (min eta_N over the range), by brute force."""
+    from slogpet.protocol import _scan_every_spacing
+    _, low, _ = _scan_every_spacing(profile, L_pet, S, N)
+    return float(low.max())
+
+
+@pytest.mark.parametrize("L,S,N", [(30.0, 100.0, 4), (30.0, 100.0, 8),
+                                   (50.0, 200.0, 6), (80.0, 300.0, 5),
+                                   (120.0, 400.0, 7), (200.0, 500.0, 4)])
+def test_a_short_detector_is_searched_as_carefully_as_a_long_one(L, S, N):
+    """The coarse pass steps SEARCH_STEP_MM at a time, an absolute length chosen
+    for detectors tens of centimetres long.  On a 3 cm one it used to leave two
+    or three candidate spacings in the whole range, and when none of those few
+    happened to cover the range they all scored zero -- a tie that argmax
+    resolved by taking the first, a spacing of zero, every bed stacked on top of
+    every other and reported as 100 per cent overlap.
+    """
+    p = sample_single_bed_profile(L, DP, DC)
+    got = best_spacing_for_n_beds(p, L, S, N)
+    assert got is not None
+    assert got.min_eta == pytest.approx(_exhaustive_minimum(p, L, S, N), rel=1e-9)
+    assert got.min_eta > 0.0
+    assert got.spacing_mm > 0.0                      # not all beds in one place
+
+
+@pytest.mark.parametrize("L,S,N", [(30.0, 100.0, 2), (30.0, 100.0, 3),
+                                   (300.0, 2000.0, 4)])
+def test_too_few_beds_is_reported_as_uncovered_not_as_a_spacing(L, S, N):
+    """The other side of the same fix: when the range really cannot be reached,
+    the answer stays a minimum of zero rather than becoming a plausible-looking
+    arrangement."""
+    p = sample_single_bed_profile(L, DP, DC)
+    got = best_spacing_for_n_beds(p, L, S, N)
+    assert got.min_eta == 0.0
+    assert _exhaustive_minimum(p, L, S, N) == 0.0
+
+
+@pytest.mark.parametrize("L,S,N", [(30.0, 100.0, 5), (300.0, 800.0, 4),
+                                   (1000.0, 1500.0, 3), (600.0, 2000.0, 9)])
+def test_the_covering_bracket_holds_every_spacing_that_covers(L, S, N):
+    """The bracket used to settle those ties keeps only spacings whose beds
+    reach the ends of the range and still overlap each other.  Anything it
+    leaves out must really have an uncovered point in the range."""
+    from slogpet.protocol import _covering_half_spacings, _scan_every_spacing
+    p = sample_single_bed_profile(L, DP, DC)
+    inside = set(_covering_half_spacings(p, S, N).tolist())
+    spacings, low, _ = _scan_every_spacing(p, L, S, N)
+    for half_spacing, minimum in zip(spacings.tolist(), low.tolist()):
+        if minimum > 0.0:
+            assert half_spacing in inside, (half_spacing, minimum)

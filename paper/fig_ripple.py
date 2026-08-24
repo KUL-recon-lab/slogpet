@@ -129,6 +129,7 @@ def make(path: Optional[str] = DEFAULT, L_pet: float = 1000.0,
     a3.set_xlabel(r"axial position $z$ (cm)")
     a3.set_ylabel(r"$\eta_N(z)$")
     a3.set_xlim(-Zw / 10, Zw / 10)
+    a3.set_ylim(0, None)
     a3.axvline(-S / 20, color="0.45", lw=0.7, ls=(0, (4, 3)))
     a3.axvline(S / 20, color="0.45", lw=0.7, ls=(0, (4, 3)))
     a3.text(0.0, 0.965, r"range of interest", transform=a3.get_xaxis_transform(),

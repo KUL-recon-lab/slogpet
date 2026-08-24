@@ -87,7 +87,9 @@ PROFILE_STEP_MM: float = 1.0
 
 SEARCH_STEP_MM: float = 10.0
 """Granularity of the exhaustive first pass over the bed spacing.  Only the
-search is this coarse; the answer is refined to the grid step afterwards."""
+search is this coarse; the answer is refined to the grid step afterwards.  It is
+an absolute length, so on a short detector it is capped -- see
+MIN_COARSE_SPACINGS."""
 
 BED_COUNT_TOLERANCE: float = 3e-2
 """How close to the best achievable minimum a smaller bed count may be and still
@@ -322,9 +324,49 @@ def _candidate_half_spacings(profile: SampledProfile, L_pet_mm: float,
                             / (2 * profile.step_mm)) + 1)
 
 
+def _support_half_width(profile: SampledProfile) -> float:
+    """Half the width of the region where one bed contributes anything at all.
+
+    Rounded up to the next grid point, so that it is never an underestimate.
+    """
+    non_zero = np.flatnonzero(profile.values > 0.0)
+    if non_zero.size == 0:
+        return 0.0
+    reach = max(abs(int(non_zero[0]) - profile.origin_index),
+                abs(int(non_zero[-1]) - profile.origin_index)) + 1
+    return reach * profile.step_mm
+
+
+def _covering_half_spacings(profile: SampledProfile, scan_length_mm: float,
+                            n_beds: int) -> IntArray:
+    """The spacings that could possibly cover the range, in half grid steps.
+
+    With ``h`` the half-width of one bed's support, a spacing ``d`` leaves no
+    part of the range uncovered only if the outermost bed still reaches the end
+    of it and neighbouring beds still overlap each other:
+
+        (n_beds - 1) * d / 2 + h >= scan_length / 2     and     d <= 2 h
+
+    Both are necessary, neither is sufficient, so this is a bracket to search
+    within rather than an answer.  It comes back empty when the two cannot hold
+    at once, which is the honest statement that this many beds cannot cover this
+    range at any spacing.
+    """
+    h = _support_half_width(profile)
+    if n_beds == 1:
+        return np.array([0]) if 2 * h >= scan_length_mm else np.empty(0, dtype=int)
+    unit = 2.0 * profile.step_mm
+    lowest = max(0.0, (scan_length_mm - 2 * h) / (n_beds - 1))
+    first = int(np.ceil(lowest / unit - 1e-9))
+    last = int(np.floor(2 * h / unit + 1e-9))
+    return np.arange(first, last + 1) if last >= first else np.empty(0, dtype=int)
+
+
 def _scan_every_spacing(profile: SampledProfile, L_pet_mm: float,
                         scan_length_mm: float, n_beds: int,
-                        chunk: int = 256) -> tuple[IntArray, FloatArray, FloatArray]:
+                        chunk: int = 256,
+                        candidates: Optional[IntArray] = None,
+                        ) -> tuple[IntArray, FloatArray, FloatArray]:
     """The minimum AND maximum over the scan range, for every candidate spacing.
 
     The fast search of ``best_spacing_for_n_beds`` only ever needs the minimum,
@@ -337,7 +379,9 @@ def _scan_every_spacing(profile: SampledProfile, L_pet_mm: float,
     half_scan = scan_length_mm / 2.0
     z_indices = profile.indices_within(half_scan)
     offsets = _bed_index_offsets(n_beds)
-    candidates = _candidate_half_spacings(profile, L_pet_mm, scan_length_mm, n_beds)
+    if candidates is None:
+        candidates = _candidate_half_spacings(profile, L_pet_mm, scan_length_mm,
+                                              n_beds)
     include_ends = not profile.covers_exactly(half_scan)
 
     lows, highs = [], []
@@ -409,6 +453,50 @@ def _worst_point_of_each_candidate(
     return worst
 
 
+#: Fewest spacings the coarse pass may try before it is allowed to call a
+#: winner.  Below this it cannot tell one basin of the rippling objective from
+#: another, so the stride is shortened instead.
+MIN_COARSE_SPACINGS: int = 12
+
+
+def _coarse_stride(search_step_mm: float, step_mm: float,
+                   max_half_spacing: int) -> int:
+    """How far apart the coarse pass puts its candidates, in half grid steps.
+
+    ``search_step_mm`` is an absolute length, chosen for detectors tens of
+    centimetres long.  On a short one the whole range of useful spacings is only
+    a few of those steps wide, which would leave two or three candidates to
+    choose between, so the stride is capped to keep at least
+    ``MIN_COARSE_SPACINGS`` of them.
+    """
+    stride = max(1, int(round(search_step_mm / (2 * step_mm))))
+    return max(1, min(stride, max_half_spacing // MIN_COARSE_SPACINGS))
+
+
+_NOTHING_COVERS = SpacingChoice(spacing_mm=0.0, min_eta=0.0, peak_to_trough=np.inf)
+
+
+def _best_of_covering_spacings(profile: SampledProfile, L_pet_mm: float,
+                               scan_length_mm: float, n_beds: int) -> SpacingChoice:
+    """The best spacing among those that could cover the range, by trying each.
+
+    Used when the coarse pass finds nothing that covers: the bracket above is
+    usually empty (this many beds simply cannot reach), and where it is not, it
+    is narrow enough to search outright.
+    """
+    candidates = _covering_half_spacings(profile, scan_length_mm, n_beds)
+    if candidates.size == 0:
+        return _NOTHING_COVERS
+    spacings, low, high = _scan_every_spacing(profile, L_pet_mm, scan_length_mm,
+                                              n_beds, candidates=candidates)
+    best = int(np.argmax(low))
+    if low[best] <= 0.0:
+        return _NOTHING_COVERS
+    return SpacingChoice(
+        spacing_mm=float(2 * spacings[best] * profile.step_mm),
+        min_eta=float(low[best]), peak_to_trough=float(high[best] / low[best]))
+
+
 def best_spacing_for_n_beds(
     profile: SampledProfile,
     L_pet_mm: float,
@@ -441,6 +529,7 @@ def best_spacing_for_n_beds(
     offsets = _bed_index_offsets(n_beds)
     z_coarsening = max(1, int(round(search_step_mm / profile.step_mm)))
 
+    settled: Optional[SpacingChoice] = None
     if n_beds == 1:
         # Only one arrangement is possible, so there is nothing to search -- but
         # it still goes through the same evaluation, which is what makes sure the
@@ -451,7 +540,8 @@ def best_spacing_for_n_beds(
         # Beyond this the beds no longer overlap the range at all.
         max_half_spacing = int((L_pet_mm + scan_length_mm) / (n_beds - 1)
                                / (2 * profile.step_mm))
-        coarse_stride = max(1, int(round(search_step_mm / (2 * profile.step_mm))))
+        coarse_stride = _coarse_stride(search_step_mm, profile.step_mm,
+                                       max_half_spacing)
 
         # -- stage one: every candidate, on a coarse z grid
         coarse = np.arange(0, max_half_spacing + 1, coarse_stride)
@@ -459,20 +549,35 @@ def best_spacing_for_n_beds(
                                           z_indices[::z_coarsening]).min(axis=1)
         winner = int(np.argmax(coarse_worst))
 
+        if coarse_worst[winner] <= 0.0:
+            # Not one coarse spacing reaches the whole range.  That may be the
+            # truth -- too few beds for this range -- but it may also be a miss:
+            # the spacings that DO cover form an interval bounded below by the
+            # beds reaching the ends and above by the gaps opening up between
+            # them, and that interval can be narrower than one coarse step.  A
+            # tie at zero also tells argmax nothing, so it would return the
+            # first candidate, a spacing of zero, all beds on top of each other.
+            # Settle it by trying every spacing.
+            settled = _best_of_covering_spacings(profile, L_pet_mm,
+                                                 scan_length_mm, n_beds)
+
         # -- stage two: refine around the winner, at the grid step
         candidates = np.arange(
             max(0, coarse[winner] - coarse_stride),
             min(max_half_spacing, coarse[winner] + coarse_stride) + 1)
 
-    worst = _worst_point_of_each_candidate(profile, candidates, offsets, z_indices,
-                                           half_scan, z_coarsening)
-    best = int(np.argmax(worst))
-    spacing = float(2 * candidates[best] * profile.step_mm)
-    ratio = coverage(profile, n_beds, spacing, scan_length_mm).peak_to_trough
-    unlimited = SpacingChoice(spacing_mm=spacing, min_eta=float(worst[best]),
-                              peak_to_trough=ratio)
+    if settled is not None:
+        unlimited = settled
+    else:
+        worst = _worst_point_of_each_candidate(profile, candidates, offsets,
+                                               z_indices, half_scan, z_coarsening)
+        best = int(np.argmax(worst))
+        spacing = float(2 * candidates[best] * profile.step_mm)
+        ratio = coverage(profile, n_beds, spacing, scan_length_mm).peak_to_trough
+        unlimited = SpacingChoice(spacing_mm=spacing, min_eta=float(worst[best]),
+                                  peak_to_trough=ratio)
 
-    if max_peak_to_trough is None or ratio <= max_peak_to_trough:
+    if max_peak_to_trough is None or unlimited.peak_to_trough <= max_peak_to_trough:
         # Nothing more to do.  This spacing maximises the minimum over ALL
         # spacings, so if it also meets the limit it is the constrained optimum.
         return unlimited
