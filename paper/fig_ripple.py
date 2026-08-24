@@ -18,7 +18,9 @@ DEFAULT = out("fig-ripple.pgf")
 def make(path: Optional[str] = DEFAULT, L_pet: float = 1000.0,
          D_cyl: float = 200.0, S: float = 1500.0,
          max_peak_to_trough: Optional[float] = None,
-         profile_counts: Sequence[int] = (1, 2, 4, 5)) -> "Figure":
+         profile_counts: Sequence[int] = (1, 2, 4, 5),
+         Ns: Sequence[int] = list(range(1, 15))
+         ) -> "Figure":
     """Why the best N is not a smooth function of S: the tiled profile ripples, and how
     much it ripples depends on N in a way that is not monotone.
 
@@ -38,7 +40,6 @@ def make(path: Optional[str] = DEFAULT, L_pet: float = 1000.0,
     """
     plt = figure_backend(path, **{"legend.fontsize": 7.5})
     profile = sample_single_bed_profile(L_pet, D_PET, D_cyl)
-    Ns = list(range(1, 15))
     res = {N: best_spacing_for_n_beds(profile, L_pet, S, N,
                                       max_peak_to_trough=max_peak_to_trough)
            for N in Ns}
