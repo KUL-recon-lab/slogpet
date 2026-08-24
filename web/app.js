@@ -24,6 +24,15 @@ const fmt = (v, d = 3) => (v === null || v === undefined || !isFinite(v)) ? "—
     : (+v.toPrecision(d)).toString();
 
 let PY = null, CAT = null, SERIES = [], STALE = true, BUSY = false;
+
+/* the ripple limit, or null for "let it ripple" -- the paper's own choice */
+const ripple = () => {
+  const v = +$("ptt").value;
+  return $("ptt").value === "" || !(v > 1) ? null : v;
+};
+
+/* selected when the page opens: one long system per vendor */
+const DEFAULTS = ["Biograph Vision Quadra", "Omni 128", "uMI Panorama GS"];
 const CUSTOM = [];
 let LOGY = false;
 
@@ -55,7 +64,10 @@ function svgEl(n, a) {
 function lineChart(host, opt) {
   const S = opt.series.filter(s => s.pts.length);
   host.innerHTML = "";
-  if (!S.length) { host.innerHTML = '<div class="hint">Nothing selected.</div>'; return; }
+  if (!S.length) {
+    host.innerHTML = '<div class="hint">' + (opt.empty || "Nothing selected.") + '</div>';
+    return;
+  }
   const label = S.length <= 4 && opt.endLabels !== false;
   const W = Math.max(340, host.clientWidth || 460), H = opt.height || 286;
   const CH = 5.9;                                     // approx px per character
@@ -272,11 +284,24 @@ function markStale() {
 const sleep = () => new Promise(r => setTimeout(r, 0));
 
 async function compute() {
+  try {
+    await computeOnce();
+  } catch (e) {
+    // a failure inside Python would otherwise leave the page frozen mid-run
+    console.error(e);
+    $("status").textContent = "Computation failed: " + e;
+  } finally {
+    BUSY = false; $("go").disabled = false; $("prog").hidden = true;
+    $("progbar").style.width = "0";
+  }
+}
+
+async function computeOnce() {
   if (BUSY) return;
   const sel = chosen();
   if (!sel.length) { $("status").textContent = "Nothing selected."; return; }
   BUSY = true; $("go").disabled = true; $("prog").hidden = false;
-  const F_o = +$("fo").value, D_cyl = +$("dcyl").value * 10;
+  const F_o = +$("fo").value, D_cyl = +$("dcyl").value * 10, ptt = ripple();
   const nS = +$("npts").value, Smax = +$("smax").value * 10;
   const Ss = Array.from({ length: nS }, (_, i) => 50 + i * (Smax - 50) / (nS - 1));
   SERIES = assignStyles(sel);
@@ -286,18 +311,22 @@ async function compute() {
   for (const s of SERIES) {
     const chunks = [];
     for (let i = 0; i < Ss.length; i += 6) chunks.push(Ss.slice(i, i + 6));
-    s.pts = []; s.beds = [];
+    s.pts = []; s.beds = []; s.dropped = 0;
     for (const c of chunks) {
-      const r = JSON.parse(PY.sweep(JSON.stringify(s.spec), F_o, D_cyl, c));
-      r.S.forEach((S, i) => { s.pts.push([S / 10, r.snr2[i]]); s.beds.push(r.n_beds[i]); });
+      const r = JSON.parse(PY.sweep(JSON.stringify(s.spec), F_o, D_cyl, c, ptt));
+      r.S.forEach((S, i) => {
+        // a scan length where the ripple limit cannot be met comes back null:
+        // leave it out of the curve rather than drawing a gap at zero
+        if (r.snr2[i] === null) { s.dropped++; return; }
+        s.pts.push([S / 10, r.snr2[i]]); s.beds.push(r.n_beds[i]);
+      });
       $("progbar").style.width = (100 * (done + 0.5) / total) + "%";
       await sleep();
     }
     done++; $("progbar").style.width = (100 * done / total) + "%";
   }
   await refreshAtS(done, total);
-  $("prog").hidden = true; $("progbar").style.width = "0";
-  BUSY = false; $("go").disabled = false; STALE = false;
+  STALE = false;
   $("go").textContent = "Recompute";
   $("status").textContent = "";
   draw();
@@ -305,9 +334,10 @@ async function compute() {
 
 async function refreshAtS(done, total) {
   const F_o = +$("fo").value, D_cyl = +$("dcyl").value * 10, S = +$("sat").value * 10;
+  const ptt = ripple();
   for (const s of SERIES) {
-    s.prof = JSON.parse(PY.profile(JSON.stringify(s.spec), F_o, D_cyl, S));
-    s.sum = JSON.parse(PY.summary(JSON.stringify(s.spec), F_o, D_cyl, S));
+    s.prof = JSON.parse(PY.profile(JSON.stringify(s.spec), F_o, D_cyl, S, 401, ptt));
+    s.sum = JSON.parse(PY.summary(JSON.stringify(s.spec), F_o, D_cyl, S, ptt));
     if (total) { done++; $("progbar").style.width = (100 * done / total) + "%"; }
     await sleep();
   }
@@ -320,49 +350,113 @@ function draw() {
   lineChart($("chart1"), {
     series: SERIES, log: LOGY, xlab: "scan length S (cm)", xunit: " cm",
     ylab: "SNR² (min over the range)",
+    empty: "No scan length in this range admits an arrangement within the ripple limit.",
     aria: "minimum squared signal to noise ratio against scan length"
   });
   legend($("leg1"), SERIES);
+  const lim = ripple();
+  const gaps = SERIES.reduce((n, s) => n + (s.dropped || 0), 0);
   $("cap1").textContent =
     `SLoG ${F_o.toFixed(1)} mm FWHM in a ${D} cm cylinder. Each point uses the ` +
-    `bed protocol that maximises the worst point of the scan range.`;
+    (lim ? `best bed protocol whose max η / min η stays at or below ${lim}: the`
+         + ` worst point of the range is maximised subject to that limit.`
+         : `bed protocol that maximises the worst point of the scan range.`) +
+    (gaps ? ` ${gaps} point${gaps > 1 ? "s" : ""} left out: no arrangement meets` +
+      ` the limit there.` : "");
 
   lineChart($("chart2"), {
     series: SERIES.map(s => ({
       ...s, pts: s.prof.z.map((z, i) => [z / 10, s.prof.snr2[i]])
-    })),
+    })).filter(s => s.pts.length),
     log: LOGY, xlab: "axial position z (cm)", xunit: " cm",
     ylab: "SNR²(z)", endLabels: false,
+    empty: "No arrangement meets the ripple limit at this scan length.",
     aria: "squared signal to noise ratio along the axis"
   });
   legend($("leg2"), SERIES);
+  const missing = SERIES.filter(s => s.sum && s.sum.infeasible).map(s => s.label);
   $("cap2").textContent = `Scan length ${S} cm. The ripple is the bed structure; ` +
-    `the curves in the left panel are the minima of these.`;
+    `the curves in the left panel are the minima of these.` +
+    (missing.length ? ` Not drawn at this scan length: ${missing.join(", ")}.` : "");
   table();
 }
 
 function table() {
-  const best = Math.max(...SERIES.map(s => s.sum.snr2_min));
+  const feasible = SERIES.filter(s => !s.sum.infeasible);
+  const best = feasible.length ? Math.max(...feasible.map(s => s.sum.snr2_min)) : NaN;
   const head = ["configuration", "L<sub>PET</sub><br>(cm)", "D<sub>PET</sub><br>(cm)",
-    "&epsilon;", "r", "beds", "overlap<br>(%)", "min &eta;<sub>N</sub>",
-    "SNR&sup2;<sub>min</sub>", "rel."];
+    "CTR<br>(ps)", "S<sub>NEMA</sub><br>(cps/kBq)", "&epsilon;", "r",
+    "beds", "overlap<br>(%)", "SNR&sup2;<sub>min</sub>", "rel."];
   let h = "<thead><tr>" + head.map(t => `<th>${t}</th>`).join("") + "</tr></thead><tbody>";
+  let implied = false;
   for (const s of SERIES) {
     const u = s.sum, sp = s.spec;
+    // "~" marks a NEMA sensitivity worked out from epsilon rather than published
+    const nema = u.S_nema === null || u.S_nema === undefined ? "—"
+      : (u.S_nema_measured ? "" : "≈") + u.S_nema.toFixed(1);
+    if (u.S_nema !== null && !u.S_nema_measured) implied = true;
+    const cells = u.infeasible
+      ? ["—", "—", "—", "—"]
+      : [String(u.n_beds), u.overlap === null ? "—" : u.overlap.toFixed(0),
+         fmt(u.snr2_min), (u.snr2_min / best).toFixed(2)];
     h += "<tr><td><span class='name'><span class='swatch' style='background:" +
       `${css(s.colour)}'></span>${s.label}</span></td>` +
       `<td>${(sp.L_pet / 10).toFixed(1)}</td><td>${(sp.D_pet / 10).toFixed(1)}</td>` +
-      `<td>${u.epsilon.toFixed(3)}</td><td>${fmt(u.r)}</td><td>${u.n_beds}</td>` +
-      `<td>${u.overlap === null ? "—" : u.overlap.toFixed(0)}</td>` +
-      `<td>${fmt(u.min_eta)}</td><td>${fmt(u.snr2_min)}</td>` +
-      `<td>${(u.snr2_min / best).toFixed(2)}</td></tr>`;
+      `<td>${u.ctr === null ? "—" : u.ctr.toFixed(0)}</td><td>${nema}</td>` +
+      `<td>${u.epsilon === null ? "—" : u.epsilon.toFixed(3)}</td><td>${fmt(u.r)}</td>` +
+      cells.map(c => `<td>${c}</td>`).join("") + "</tr>";
   }
   $("tab").innerHTML = h + "</tbody>";
-  $("tabnote").textContent = `at S = ${$("sat").value} cm; "rel." is relative to the ` +
-    `best of the selected configurations`;
+  const lim = ripple();
+  $("tabnote").textContent = `at S = ${$("sat").value} cm` +
+    (lim ? `, max η / min η ≤ ${lim}` : "") +
+    `; "rel." is relative to the best of the selected configurations` +
+    (implied ? "; ≈ marks a sensitivity implied by ε rather than published" : "") +
+    (SERIES.some(s => s.sum.infeasible) ? "; — where the limit cannot be met" : "");
 }
 
 /* ------------------------------------------------------- custom systems */
+function effMode() { return $("c-effmode").value; }
+
+function customSpec() {
+  /* what the form currently describes, whether or not it is complete */
+  const num = id => $(id).value === "" ? null : +$(id).value;
+  const base = ALL()[+$("c-from").value] || {};
+  const nema = effMode() === "nema";
+  return {
+    kind: "custom", family: "your own", label: $("c-name").value || "custom",
+    name: $("c-name").value || "custom",
+    L_pet: num("c-L") * 10, D_pet: num("c-D") * 10,
+    F_y: num("c-fy"), F_z: num("c-fz"),
+    ctr: num("c-ctr"), F_t: null,
+    L_mrd: num("c-mrd") === null ? null : num("c-mrd") * 10,
+    // epsilon wins over S_nema in the package, so only one of them travels
+    epsilon: nema ? null : num("c-eps"),
+    S_nema: nema ? num("c-nema") : null,
+    crystal: base.crystal || "", crystal_size: base.crystal_size || null,
+    energy_resolution: null, energy_window: null, reference: "",
+    assumed: [], note: "defined in the browser"
+  };
+}
+
+function updateEffHint() {
+  /* the two ways of giving the sensitivity are one number apart; show the other */
+  const nema = effMode() === "nema";
+  $("c-nema-wrap").hidden = !nema;
+  $("c-eps-wrap").hidden = nema;
+  const spec = customSpec();
+  const hint = $("c-effhint");
+  if (!PY || !(spec.L_pet > 0) || !(spec.D_pet > 0)
+      || !(nema ? spec.S_nema > 0 : spec.epsilon > 0)) { hint.textContent = ""; return; }
+  try {
+    const d = JSON.parse(PY.derived(JSON.stringify(spec)));
+    hint.textContent = nema
+      ? `${(+spec.S_nema).toFixed(1)} cps/kBq on this geometry means ε = ${d.epsilon.toFixed(3)}.`
+      : `ε = ${(+spec.epsilon).toFixed(3)} on this geometry means ${d.S_nema.toFixed(1)} cps/kBq.`;
+    if (d.epsilon > 1) hint.textContent += " Above 1, which no real detector reaches.";
+  } catch (e) { hint.textContent = ""; }
+}
+
 function fillCustomFrom() {
   const sel = $("c-from");
   sel.innerHTML = ALL().map((s, i) => `<option value="${i}">${s.label}</option>`).join("");
@@ -374,28 +468,27 @@ function fillCustomFrom() {
     $("c-ctr").value = s.ctr !== null && s.ctr !== undefined ? s.ctr
       : (s.F_t ? Math.round(s.F_t / 0.15) : "");
     $("c-eps").value = (+s.epsilon).toFixed(3);
+    $("c-nema").value = s.S_nema !== null && s.S_nema !== undefined
+      ? (+s.S_nema).toFixed(1)
+      : (1000 * s.S_ideal * s.epsilon).toFixed(1);
     $("c-mrd").value = s.L_mrd ? (s.L_mrd / 10).toFixed(0) : "";
     $("c-name").value = "like " + s.label.split(" (")[0];
+    updateEffHint();
   };
-  sel.value = "2"; sel.onchange();
+  sel.value = String(Math.min(2, ALL().length - 1)); sel.onchange();
 }
 function addCustom() {
-  const num = id => $(id).value === "" ? null : +$(id).value;
-  const base = ALL()[+$("c-from").value];
-  const spec = {
-    kind: "custom", family: "your own", label: $("c-name").value || "custom",
-    name: $("c-name").value || "custom",
-    L_pet: num("c-L") * 10, D_pet: num("c-D") * 10,
-    F_y: num("c-fy"), F_z: num("c-fz"),
-    ctr: num("c-ctr"), F_t: null,
-    L_mrd: num("c-mrd") === null ? null : num("c-mrd") * 10,
-    epsilon: num("c-eps"), S_nema: null,
-    crystal: base.crystal, crystal_size: base.crystal_size,
-    energy_resolution: null, energy_window: null, reference: "",
-    assumed: [], note: "defined in the browser"
-  };
-  for (const k of ["L_pet", "D_pet", "F_y", "F_z", "epsilon"]) {
+  const spec = customSpec();
+  const need = ["L_pet", "D_pet", "F_y", "F_z",
+                effMode() === "nema" ? "S_nema" : "epsilon"];
+  for (const k of need) {
     if (!(spec[k] > 0)) { $("status").textContent = "Fill in " + k + "."; return; }
+  }
+  const eps = JSON.parse(PY.derived(JSON.stringify(spec))).epsilon;
+  if (!(eps > 0) || eps > 1) {
+    $("status").textContent =
+      `That is ε = ${eps.toFixed(2)}; a detector cannot record more pairs than reach it.`;
+    return;
   }
   CUSTOM.push(spec);
   buildPicker();
@@ -430,12 +523,19 @@ async function main() {
   bar.style.width = "100%";
 
   buildPicker();
-  CAT.systems[2]._cb.checked = true;      // Quadra
-  CAT.systems[6]._cb.checked = true;      // Omni Legend 32
-  CAT.systems[9]._cb.checked = true;      // uMI Panorama GS
+  for (const want of DEFAULTS) {          // by name: indices move when data does
+    const hit = CAT.systems.find(s => s.name === want);
+    if (hit) hit._cb.checked = true;
+    else console.warn("no system named", want);
+  }
   onPick();
   fillCustomFrom();
   $("c-add").onclick = addCustom;
+  $("c-effmode").onchange = updateEffHint;
+  for (const id of ["c-L", "c-D", "c-mrd", "c-eps", "c-nema"]) {
+    $(id).addEventListener("input", updateEffHint);
+  }
+  updateEffHint();
   $("provbody").innerHTML = Object.entries(CAT.references)
     .map(([k, v]) => `<div style="margin-bottom:4px"><b>${k}.</b> ${v}</div>`).join("");
   $("boot").hidden = true; $("app").hidden = false;
@@ -466,7 +566,9 @@ window.addEventListener("DOMContentLoaded", () => {
     const upd = () => { out.textContent = live[id](el.value); };
     el.addEventListener("input", upd); upd();
   }
-  for (const id of ["fo", "dcyl", "smax", "npts"]) $(id).addEventListener("change", markStale);
+  for (const id of ["fo", "dcyl", "smax", "npts", "ptt"]) {
+    $(id).addEventListener("change", markStale);
+  }
   $("sat").addEventListener("change", async () => {
     if (!SERIES.length || BUSY) return;
     BUSY = true; $("status").textContent = "…"; await refreshAtS(0, 0);

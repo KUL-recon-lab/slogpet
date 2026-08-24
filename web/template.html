@@ -134,6 +134,13 @@ code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--page
         <div><label for="sat">Profile at <b id="sat-v">100</b> cm</label>
           <input type="range" id="sat" min="5" max="200" step="5" value="100"></div>
       </div>
+      <label for="ptt">Ripple limit, max&nbsp;&eta;<sub>N</sub>&nbsp;/&nbsp;min&nbsp;&eta;<sub>N</sub></label>
+      <input type="number" id="ptt" step="0.05" min="1" placeholder="none">
+      <div class="hint">Blank lets the acquisition ripple as much as it likes,
+      which is what maximises the worst point of the range &mdash; the paper's
+      choice. Setting it to, say, 1.2 buys an evener profile with more beds, at
+      some cost in sensitivity. Scan lengths where no arrangement meets the
+      limit are left out of the curves.</div>
     </fieldset>
 
     <fieldset>
@@ -161,15 +168,31 @@ code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--page
         <div class="row">
           <div><label for="c-ctr">CTR (ps, blank = no TOF)</label>
             <input type="number" id="c-ctr" step="1" min="0"></div>
-          <div><label for="c-eps">&epsilon;</label>
-            <input type="number" id="c-eps" step="0.01" min="0.01" max="1"></div>
+          <div><label for="c-mrd">Max ring diff. (cm)</label>
+            <input type="number" id="c-mrd" step="1" min="1"></div>
         </div>
-        <label for="c-mrd">Max ring difference (cm, blank = none)</label>
-        <input type="number" id="c-mrd" step="1" min="1">
+        <label for="c-effmode">Sensitivity given as</label>
+        <select id="c-effmode">
+          <option value="nema">NEMA sensitivity (70 cm line source)</option>
+          <option value="eps">detector-pair efficiency &epsilon;</option>
+        </select>
+        <div id="c-nema-wrap">
+          <label for="c-nema">S<sub>NEMA</sub> (cps/kBq)</label>
+          <input type="number" id="c-nema" step="0.1" min="0.1">
+        </div>
+        <div id="c-eps-wrap" hidden>
+          <label for="c-eps">&epsilon;</label>
+          <input type="number" id="c-eps" step="0.01" min="0.01" max="1">
+        </div>
+        <div class="hint" id="c-effhint"></div>
         <button id="c-add" style="width:100%;margin-top:10px">Add to the list</button>
-        <div class="hint">&epsilon; is the detector-pair efficiency: the fraction of
-        the pairs reaching the detector that are recorded. Copy it from a system with
-        the same crystal &mdash; it barely depends on the axial length.</div>
+        <div class="hint">The two are the same number in different clothes:
+        S<sub>NEMA</sub> = 1000 &times; S<sub>ideal</sub> &times; &epsilon;, with
+        S<sub>ideal</sub> fixed by the geometry above. Quote whichever the
+        datasheet gives. &epsilon; is the detector-pair efficiency &mdash; the
+        fraction of the pairs reaching the detector that are recorded &mdash; and
+        barely depends on the axial length, so it can be copied from a system
+        with the same crystal.</div>
       </details>
     </fieldset>
 

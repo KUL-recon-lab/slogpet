@@ -124,3 +124,92 @@ def test_families_group_by_crystal(cat):
         fam[s["family"]].add((s["crystal"], tuple(s["crystal_size"] or ())))
     for f, members in fam.items():
         assert len(members) == 1, (f, members)
+
+
+# ---------------------------------------------------- the ripple limit, and
+# sensitivity given as a NEMA figure instead of an efficiency
+def test_a_ripple_limit_changes_the_protocol_not_the_physics(cat):
+    """The limit reaches the browser through the same argument the paper uses."""
+    quadra = next(s for s in cat["systems"] if s["name"] == "Biograph Vision Quadra")
+    free = json.loads(api.summary(quadra, 5.0, 200.0, 1000.0))
+    held = json.loads(api.summary(quadra, 5.0, 200.0, 1000.0, 1.1))
+    assert free["peak_to_trough"] > 1.1                  # the limit binds
+    assert held["peak_to_trough"] <= 1.1 + 1e-12
+    assert held["n_beds"] > free["n_beds"]               # paid for in beds
+    assert held["snr2_min"] < free["snr2_min"]           # and in sensitivity
+    for k in ("epsilon", "r", "S_nema", "ctr"):          # the system is unchanged
+        assert held[k] == free[k]
+
+
+def test_an_unmeetable_limit_is_reported_not_raised(cat):
+    """slogpet refuses such a limit with an exception.  The page must survive it,
+    so the adapter turns the refusal into data: nulls in the sweep, a message in
+    the summary."""
+    quadra = next(s for s in cat["systems"] if s["name"] == "Biograph Vision Quadra")
+    swept = json.loads(api.sweep(quadra, 5.0, 200.0, [500.0, 1000.0], 1.001))
+    assert swept["snr2"] == [None, None]
+    assert swept["n_beds"] == [None, None]
+    told = json.loads(api.summary(quadra, 5.0, 200.0, 1000.0, 1.001))
+    assert "max/min" in told["infeasible"]
+    assert "snr2_min" not in told
+    assert told["epsilon"] is not None                   # still describes the system
+    drawn = json.loads(api.profile(quadra, 5.0, 200.0, 1000.0, 401, 1.001))
+    assert drawn["z"] == [] and drawn["snr2_min"] is None
+
+
+def test_no_limit_is_the_default_in_every_entry_point(cat):
+    """Blank, absent and zero all mean the same thing: no limit."""
+    one = cat["systems"][0]
+    plain = api.summary(one, 5.0, 200.0, 1000.0)
+    for blank in (None, "", 0):
+        assert api.summary(one, 5.0, 200.0, 1000.0, blank) == plain
+
+
+def test_a_nema_sensitivity_is_as_good_as_an_efficiency(cat):
+    """A custom system may quote either; they must describe the same scanner."""
+    base = next(s for s in cat["systems"] if s["name"] == "Omni 128")
+    by_eps = dict(base, epsilon=base["epsilon"], S_nema=None)
+    d = json.loads(api.derived(by_eps))
+    by_nema = dict(base, epsilon=None, S_nema=d["S_nema"])
+    assert api.scanner_from(by_nema).efficiency() == pytest.approx(
+        base["epsilon"], rel=1e-12)
+    assert json.loads(api.summary(by_nema, 5.0, 200.0, 1000.0))["snr2_min"] == (
+        pytest.approx(json.loads(api.summary(by_eps, 5.0, 200.0, 1000.0))["snr2_min"],
+                      rel=1e-12))
+
+
+def test_the_form_can_convert_between_the_two(cat):
+    """What the hint under the field says, and the identity behind it."""
+    one = next(s for s in cat["systems"] if s["name"] == "uMI Panorama GS")
+    d = json.loads(api.derived(one))
+    assert d["S_nema_measured"] is True
+    assert d["S_nema"] == pytest.approx(1000.0 * d["S_ideal"] * d["epsilon"], rel=1e-12)
+    implied = json.loads(api.derived(dict(one, S_nema=None, epsilon=0.25)))
+    assert implied["S_nema_measured"] is False
+    assert implied["S_nema"] == pytest.approx(1000.0 * d["S_ideal"] * 0.25, rel=1e-12)
+
+
+def test_the_table_columns_are_all_supplied(cat):
+    """CTR and the NEMA sensitivity are new columns; a system without time of
+    flight must say so rather than showing a number."""
+    tof = json.loads(api.summary(
+        next(s for s in cat["systems"] if s["name"] == "Biograph Vision Quadra"),
+        5.0, 200.0, 1000.0))
+    assert tof["ctr"] == pytest.approx(230.0, abs=0.5)
+    assert tof["S_nema"] == pytest.approx(175.3) and tof["S_nema_measured"]
+    plain = json.loads(api.summary(
+        next(s for s in cat["systems"] if s["name"] == "Omni 128"), 5.0, 200.0, 1000.0))
+    assert plain["ctr"] is None and plain["has_tof"] is False
+
+
+def test_an_empty_field_means_no_limit_however_it_arrives():
+    """JavaScript's null does not reach Python as None: Pyodide hands over a
+    JsNull object, which raises on float().  Every spelling of "blank" has to
+    end up as no limit, or the page dies on its first call."""
+    class JsNull:                       # what Pyodide passes for a JS null
+        def __float__(self):
+            raise TypeError("float() argument must be a real number, not 'JsNull'")
+
+    for blank in (None, "", 0, 0.0, JsNull()):
+        assert api._number(blank) is None
+    assert api._number("1.2") == 1.2 and api._number(1.2) == 1.2
