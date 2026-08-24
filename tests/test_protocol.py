@@ -9,8 +9,8 @@ import pytest
 
 import slogpet as sp
 from slogpet import (sample_single_bed_profile, profile_fwhm,
-                     best_spacing_for_n_beds, optimise_bed_positions,
-                     coverage)
+                     best_spacing_for_n_beds, flattest_spacing_for_n_beds,
+                     optimise_bed_positions, coverage)
 from slogpet.snr import _eta_N
 
 LP, DP, DC = 1000.0, 740.0, 200.0
@@ -230,3 +230,73 @@ def test_peak_to_trough_is_one_for_a_flat_profile(profile):
     """A range small enough to sit on the flat top of a single bed barely ripples."""
     c = coverage(profile, 1, 0.0, 20.0)
     assert 1.0 <= c.peak_to_trough < 1.01
+
+
+# ------------------------------------------------- limiting how much it ripples
+def test_a_limit_that_is_already_met_changes_nothing(profile):
+    """The min-maximising spacing maximises the minimum over ALL spacings, so
+    whenever it also satisfies the limit it is the constrained optimum too and
+    nothing should move."""
+    for S in (300.0, 900.0, 1500.0):
+        free = optimise_bed_positions(profile, LP, S)
+        loose = optimise_bed_positions(profile, LP, S,
+                                       max_peak_to_trough=10.0 * free.coverage.peak_to_trough)
+        assert loose.n_beds == free.n_beds
+        assert loose.spacing_mm == free.spacing_mm
+        assert loose.coverage.min_eta == pytest.approx(free.coverage.min_eta, rel=1e-15)
+
+
+@pytest.mark.parametrize("cap", [1.5, 1.2, 1.1])
+def test_the_limit_is_respected(profile, cap):
+    for S in (400.0, 900.0, 1500.0, 1900.0):
+        try:
+            got = optimise_bed_positions(profile, LP, S, max_peak_to_trough=cap)
+        except ValueError:
+            continue                       # no arrangement can meet it; tested below
+        assert got.coverage.peak_to_trough <= cap * (1 + 1e-12), (S, cap)
+
+
+def test_a_tighter_limit_never_allows_a_better_minimum(profile):
+    """What a limit can achieve can only shrink as it tightens.  The *reported*
+    minimum is not monotone -- the smallest-N tie-break can jump to a different
+    count -- so the invariant is about what is achievable, not what is picked."""
+    S = 1500.0
+    achievable = []
+    for cap in (None, 2.0, 1.5, 1.2, 1.1):
+        best = -np.inf
+        for N in range(1, 12):
+            choice = best_spacing_for_n_beds(profile, LP, S, N, max_peak_to_trough=cap)
+            if choice is not None:
+                best = max(best, choice.min_eta)
+        achievable.append(best)
+    assert all(a >= b - 1e-15 for a, b in zip(achievable, achievable[1:])), achievable
+
+
+def test_an_impossible_limit_is_refused_not_fudged(profile):
+    """Better a clear error than an arrangement that silently violates the limit."""
+    with pytest.raises(ValueError, match="max/min"):
+        optimise_bed_positions(profile, LP, 1500.0, max_peak_to_trough=1.001)
+
+
+def test_the_limit_can_force_a_different_spacing_at_the_same_bed_count():
+    """The point of reaching inside each bed count: at 70 cm covering 40 cm, the
+    min-maximising three-bed spacing is too uneven, and a different one meets the
+    limit while keeping most of the minimum."""
+    pr = sample_single_bed_profile(700.0, DP, 200.0)
+    free = best_spacing_for_n_beds(pr, 700.0, 400.0, 3)
+    held = best_spacing_for_n_beds(pr, 700.0, 400.0, 3, max_peak_to_trough=1.2)
+    assert free.peak_to_trough > 1.2
+    assert held is not None
+    assert held.spacing_mm != free.spacing_mm
+    assert held.peak_to_trough <= 1.2
+    assert 0.5 < held.min_eta / free.min_eta < 1.0
+
+
+def test_the_flattest_spacing_is_at_least_as_even_as_any_other(profile):
+    from slogpet.protocol import _scan_every_spacing
+    for N in (2, 3, 5):
+        flat = flattest_spacing_for_n_beds(profile, LP, 1500.0, N)
+        spacings, low, high = _scan_every_spacing(profile, LP, 1500.0, N)
+        covered = low > 0
+        assert flat.peak_to_trough == pytest.approx(
+            (high[covered] / low[covered]).min(), rel=1e-12)

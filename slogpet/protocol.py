@@ -78,7 +78,8 @@ __all__ = [
     "PROFILE_STEP_MM", "SEARCH_STEP_MM", "BED_COUNT_TOLERANCE",
     "SampledProfile", "SpacingChoice", "ScanCoverage", "BedArrangement",
     "sample_single_bed_profile", "profile_fwhm", "bed_positions", "tile_beds",
-    "coverage", "best_spacing_for_n_beds", "optimise_bed_positions",
+    "coverage", "best_spacing_for_n_beds", "flattest_spacing_for_n_beds",
+    "optimise_bed_positions",
 ]
 
 PROFILE_STEP_MM: float = 1.0
@@ -233,8 +234,10 @@ class SpacingChoice(NamedTuple):
     spacing_mm: float
     min_eta: float
     """The worst point of the scan range at that spacing.  This is what the bed
-    count is chosen on; the mean and maximum are reported afterwards by
-    ``coverage``, which is why they are not computed for every candidate."""
+    count is chosen on; the mean is reported afterwards by ``coverage``, which is
+    why it is not computed for every candidate."""
+    peak_to_trough: float
+    """``max / min`` for that arrangement -- how uneven it is."""
 
 
 class ScanCoverage(NamedTuple):
@@ -309,6 +312,71 @@ def coverage(profile: SampledProfile, n_beds: int, spacing_mm: float,
                         max_eta=float(values.max()))
 
 
+def _candidate_half_spacings(profile: SampledProfile, L_pet_mm: float,
+                             scan_length_mm: float, n_beds: int) -> IntArray:
+    """Every spacing worth trying, in units of half a grid step.  Beyond the last
+    one the beds no longer overlap the scan range at all."""
+    if n_beds == 1:
+        return np.array([0])
+    return np.arange(0, int((L_pet_mm + scan_length_mm) / (n_beds - 1)
+                            / (2 * profile.step_mm)) + 1)
+
+
+def _scan_every_spacing(profile: SampledProfile, L_pet_mm: float,
+                        scan_length_mm: float, n_beds: int,
+                        chunk: int = 256) -> tuple[IntArray, FloatArray, FloatArray]:
+    """The minimum AND maximum over the scan range, for every candidate spacing.
+
+    The fast search of ``best_spacing_for_n_beds`` only ever needs the minimum,
+    and localises it to a few troughs.  A limit on the ripple needs the maximum
+    too, and the crest can be anywhere in the range, so this evaluates the whole
+    range for every candidate -- in chunks, to keep the working array bounded.
+
+    Returns ``(half_spacings, min_eta, max_eta)``.
+    """
+    half_scan = scan_length_mm / 2.0
+    z_indices = profile.indices_within(half_scan)
+    offsets = _bed_index_offsets(n_beds)
+    candidates = _candidate_half_spacings(profile, L_pet_mm, scan_length_mm, n_beds)
+    include_ends = not profile.covers_exactly(half_scan)
+
+    lows, highs = [], []
+    for start in range(0, len(candidates), chunk):
+        block = candidates[start:start + chunk]
+        tiled = _tile_beds_on_grid(profile, block, offsets, z_indices)
+        low, high = tiled.min(axis=1), tiled.max(axis=1)
+        if include_ends:
+            beds = (bed_positions(n_beds, 1.0)[None, :]
+                    * (2.0 * block * profile.step_mm)[:, None])
+            for end in (-half_scan, half_scan):
+                at_end = profile(end - beds).mean(axis=1)
+                low = np.minimum(low, at_end)
+                high = np.maximum(high, at_end)
+        lows.append(low)
+        highs.append(high)
+    return candidates, np.concatenate(lows), np.concatenate(highs)
+
+
+def flattest_spacing_for_n_beds(profile: SampledProfile, L_pet_mm: float,
+                                scan_length_mm: float,
+                                n_beds: int) -> Optional[SpacingChoice]:
+    """The spacing that makes the profile as even as it can be, for this many beds.
+
+    The counterpart of ``best_spacing_for_n_beds``: that one maximises the worst
+    point regardless of how uneven the result is, this one minimises
+    ``max / min`` regardless of how low the worst point ends up.  Returns None if
+    no spacing covers the range at all.
+    """
+    spacings, low, high = _scan_every_spacing(profile, L_pet_mm, scan_length_mm, n_beds)
+    covered = low > 0
+    if not covered.any():
+        return None
+    ratio = np.where(covered, high / np.where(covered, low, 1.0), np.inf)
+    best = int(np.argmin(ratio))
+    return SpacingChoice(spacing_mm=float(2 * spacings[best] * profile.step_mm),
+                         min_eta=float(low[best]), peak_to_trough=float(ratio[best]))
+
+
 # ============================== 4: the best spacing for a given number of beds
 def _worst_point_of_each_candidate(
     profile: SampledProfile, half_spacings: IntArray, offsets: IntArray,
@@ -347,8 +415,14 @@ def best_spacing_for_n_beds(
     scan_length_mm: float,
     n_beds: int,
     search_step_mm: float = SEARCH_STEP_MM,
-) -> SpacingChoice:
+    max_peak_to_trough: Optional[float] = None,
+) -> Optional[SpacingChoice]:
     """The spacing that maximises ``min eta_N``, for exactly ``n_beds`` beds.
+
+    ``max_peak_to_trough`` caps how uneven the result may be: pass 1.2 to insist
+    that the best point of the range is at most 20 per cent above the worst.  The
+    default, None, imposes no limit.  Returns None if no spacing with this many
+    beds can meet the limit.
 
     Every bed gets the same acquisition time and the same spacing -- equivalently
     a single constant overlap, which is what a scanner console lets one set.
@@ -393,8 +467,40 @@ def best_spacing_for_n_beds(
     worst = _worst_point_of_each_candidate(profile, candidates, offsets, z_indices,
                                            half_scan, z_coarsening)
     best = int(np.argmax(worst))
-    return SpacingChoice(spacing_mm=float(2 * candidates[best] * profile.step_mm),
-                         min_eta=float(worst[best]))
+    spacing = float(2 * candidates[best] * profile.step_mm)
+    ratio = coverage(profile, n_beds, spacing, scan_length_mm).peak_to_trough
+    unlimited = SpacingChoice(spacing_mm=spacing, min_eta=float(worst[best]),
+                              peak_to_trough=ratio)
+
+    if max_peak_to_trough is None or ratio <= max_peak_to_trough:
+        # Nothing more to do.  This spacing maximises the minimum over ALL
+        # spacings, so if it also meets the limit it is the constrained optimum.
+        return unlimited
+
+    # It does not, so the limit binds and a different spacing has to be found:
+    # one that gives up some of the minimum to even the profile out.
+    return _best_within_ripple_limit(profile, L_pet_mm, scan_length_mm, n_beds,
+                                     max_peak_to_trough)
+
+
+def _best_within_ripple_limit(profile: SampledProfile, L_pet_mm: float,
+                              scan_length_mm: float, n_beds: int,
+                              max_peak_to_trough: float) -> Optional[SpacingChoice]:
+    """The largest minimum reachable without exceeding the ripple limit.
+
+    Every spacing is scanned rather than searched: the set that satisfies the
+    limit need not be a single interval, so a coarse-then-refine search could
+    step straight over it.
+    """
+    spacings, low, high = _scan_every_spacing(profile, L_pet_mm, scan_length_mm, n_beds)
+    covered = low > 0
+    ratio = np.where(covered, high / np.where(covered, low, 1.0), np.inf)
+    allowed = covered & (ratio <= max_peak_to_trough)
+    if not allowed.any():
+        return None
+    best = int(np.argmax(np.where(allowed, low, -np.inf)))
+    return SpacingChoice(spacing_mm=float(2 * spacings[best] * profile.step_mm),
+                         min_eta=float(low[best]), peak_to_trough=float(ratio[best]))
 
 
 # ======================================== 5: the best number of bed positions
@@ -409,6 +515,7 @@ def optimise_bed_positions(
     scan_length_mm: float,
     max_beds: Optional[int] = None,
     tolerance: float = BED_COUNT_TOLERANCE,
+    max_peak_to_trough: Optional[float] = None,
 ) -> BedArrangement:
     """The arrangement that maximises the worst point of the scan range.
 
@@ -423,19 +530,40 @@ def optimise_bed_positions(
     Which of several near-equal counts is picked hardly matters: what is being
     compared between scanners is the minimum sensitivity, and every candidate
     within ``tolerance`` delivers that to within ``tolerance``.
+
+    ``max_peak_to_trough`` trades sensitivity for uniformity.  By default there is
+    no limit and the profile is allowed to ripple as much as it likes, which is
+    what maximises the worst point.  Setting it to, say, 1.2 insists that the best
+    point of the range is at most 20 per cent above the worst; each bed count is
+    then given the best spacing that respects the limit -- which may not be the
+    one that maximises its minimum -- and counts that cannot respect it at all are
+    dropped.  A limit no arrangement can meet raises ``ValueError`` rather than
+    quietly returning one that violates it.
     """
     if max_beds is None:
         max_beds = _most_beds_worth_trying(L_pet_mm, scan_length_mm)
 
-    searched = [best_spacing_for_n_beds(profile, L_pet_mm, scan_length_mm, n)
-                for n in range(1, max_beds + 1)]
-    achievable = max(choice.min_eta for choice in searched)
+    counts = range(1, max_beds + 1)
+    searched = [(n, best_spacing_for_n_beds(profile, L_pet_mm, scan_length_mm, n,
+                                            max_peak_to_trough=max_peak_to_trough))
+                for n in counts]
+    feasible = [(n, choice) for n, choice in searched if choice is not None]
+    if not feasible:
+        flattest = [flattest_spacing_for_n_beds(profile, L_pet_mm, scan_length_mm, n)
+                    for n in counts]
+        reachable = min((c.peak_to_trough for c in flattest if c is not None),
+                        default=np.inf)
+        raise ValueError(
+            "no arrangement of at most %d beds keeps max/min at or below %.3f "
+            "over a %.0f mm range; the most even one available reaches %.3f"
+            % (max_beds, max_peak_to_trough, scan_length_mm, reachable))
 
-    for n_beds, choice in enumerate(searched, start=1):
+    achievable = max(choice.min_eta for _n, choice in feasible)
+    for n_beds, choice in feasible:
         if choice.min_eta >= (1.0 - tolerance) * achievable:
             break
     else:                                        # pragma: no cover - unreachable
-        n_beds, choice = 1, searched[0]
+        n_beds, choice = feasible[0]
 
     return BedArrangement(
         n_beds=n_beds, spacing_mm=choice.spacing_mm,

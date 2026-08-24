@@ -92,6 +92,24 @@ minimum, the mean and the maximum of `eta_N` over the scan range:
     best.coverage.max_eta                   # the crest of the ripple
     best.coverage.ripple                    # peak-to-trough, relative to the mean
 
+By default the profile is allowed to ripple as much as it likes, since that is
+what maximises the worst point. `max_peak_to_trough` trades sensitivity for
+uniformity:
+
+    sp.optimise_bed_positions(profile, L_pet_mm=1000.0, scan_length_mm=1500.0,
+                              max_peak_to_trough=1.2)   # at most 20 % ripple
+
+Each bed count is then given the best spacing that respects the limit -- which
+need not be the one that maximises its minimum -- and counts that cannot respect
+it at all are dropped. A limit nothing can meet raises `ValueError` naming what
+is reachable, rather than quietly returning an arrangement that violates it.
+`flattest_spacing_for_n_beds` answers the companion question: how even can this
+many beds be made, never mind the cost.
+
+The cost is usually real but modest, and occasionally negative -- a tight limit
+can rule out a rippled small-bed-count protocol that the 3 % tie-break would
+otherwise have preferred over a better one.
+
 ## Conventions
 
 Lengths in mm, coincidence timings in ps, all resolutions as FWHM,

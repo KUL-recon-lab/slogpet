@@ -59,14 +59,19 @@ def axial_profile(scanner: Scanner, D_cyl: float, mu: float = MU_WATER,
 
 @lru_cache(maxsize=4096)
 def optimal_protocol(profile: AxialProfile, scan_length: float,
-                     Nmax: Optional[int] = None, tol: float = 3e-2) -> Protocol:
+                     Nmax: Optional[int] = None, tol: float = 3e-2,
+                     max_peak_to_trough: Optional[float] = None) -> Protocol:
     """Bed positions maximising the minimum of ``eta_N`` over ``|z| <= S/2``.
+
+    ``max_peak_to_trough`` optionally limits how uneven the profile may be, at
+    some cost in sensitivity; see ``slogpet.optimise_bed_positions``.
 
     Memoised as well: this is the expensive step once the profile exists, and an
     interactive frontend revisits the same scan lengths constantly."""
     L = profile.scanner.L_pet
     best = optimise_bed_positions(profile.samples, L, scan_length,
-                                  max_beds=Nmax, tolerance=tol)
+                                  max_beds=Nmax, tolerance=tol,
+                                  max_peak_to_trough=max_peak_to_trough)
     return Protocol(scan_length=scan_length, n_beds=best.n_beds,
                     spacing=best.spacing_mm, min_eta=best.coverage.min_eta,
                     mean_eta=best.coverage.mean_eta,

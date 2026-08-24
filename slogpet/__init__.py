@@ -25,7 +25,7 @@ from .protocol import (PROFILE_STEP_MM, SEARCH_STEP_MM, BED_COUNT_TOLERANCE,
                        SampledProfile, SpacingChoice, ScanCoverage, BedArrangement,
                        sample_single_bed_profile, profile_fwhm, bed_positions,
                        tile_beds, coverage, best_spacing_for_n_beds,
-                       optimise_bed_positions)
+                       flattest_spacing_for_n_beds, optimise_bed_positions)
 from .types import Scanner, Task, Protocol, AxialProfile, SNRResult, L_S_NEMA
 from .snr import (axial_profile, optimal_protocol, protocol_for_N, snr2,
                   snr2_curve, snr2_value)
@@ -38,7 +38,8 @@ __all__ = [
     "F_t_equiv", "PROFILE_STEP_MM", "SEARCH_STEP_MM", "BED_COUNT_TOLERANCE",
     "SampledProfile", "SpacingChoice", "ScanCoverage", "BedArrangement",
     "sample_single_bed_profile", "profile_fwhm", "bed_positions", "tile_beds",
-    "coverage", "best_spacing_for_n_beds", "optimise_bed_positions",
+    "coverage", "best_spacing_for_n_beds", "flattest_spacing_for_n_beds",
+    "optimise_bed_positions",
     "Scanner", "Task", "Protocol", "AxialProfile", "SNRResult", "L_S_NEMA",
     "axial_profile", "optimal_protocol", "protocol_for_N", "snr2", "snr2_curve",
     "snr2_value",
