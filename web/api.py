@@ -16,7 +16,8 @@ from slogpet.data import (load_systems, load_detector_groups, load_references,
                           load_conventions)
 from slogpet.resolution import C_OVER_2
 
-__all__ = ["catalogue", "scanner_from", "summary", "sweep", "profile", "derived"]
+__all__ = ["catalogue", "scanner_from", "summary", "sweep", "profile", "derived",
+           "single_bed"]
 
 
 def _number(v):
@@ -218,6 +219,30 @@ def sweep(spec, F_o, D_cyl, S_list, max_peak_to_trough=None):
         out["n_beds"].append(p.n_beds)
         out["overlap"].append(p.overlap)
     return json.dumps(out)
+
+
+def single_bed(spec, F_o, D_cyl, nz=401):
+    """``eta(z)`` for ONE bed position, with the two factors that multiply it.
+
+    This is the profile every multi-bed acquisition is built from, and it does
+    not depend on the scan length or on the protocol.  ``epsilon`` and ``r`` come
+    back alongside rather than applied, so that the page can show what each
+    contributes without asking for the curve again: the system part of the SNR^2
+    at one bed position is ``epsilon x eta(z) x r x sigma_o^3``.
+    """
+    sc = scanner_from(spec)
+    task = sp.Task(float(F_o), float(D_cyl))
+    prof = sp.axial_profile(sc, task.D_cyl, task.mu)
+    reach = 0.55 * sc.L_pet                      # eta is zero beyond the detector
+    z = np.linspace(-reach, reach, int(nz))
+    return json.dumps({
+        "z": [float(v) for v in z],
+        "eta": [float(v) for v in prof.samples(z)],
+        "epsilon": sc.efficiency(),
+        "r": sc.r(task),
+        "sigma_o3": (float(F_o) / sp.FWHM) ** 3,
+        "eta_peak": float(prof.samples.values.max()),
+    })
 
 
 def profile(spec, F_o, D_cyl, S, nz=401, max_peak_to_trough=None):

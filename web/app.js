@@ -35,6 +35,7 @@ const ripple = () => {
 const DEFAULTS = ["Biograph Vision Quadra", "Omni 128", "uMI Panorama GS"];
 const CUSTOM = [];
 let LOGY = false;
+let MUL_E = false, MUL_R = false;      // factors applied to the single-bed panel
 
 /* ---------------------------------------------------------------- charts */
 function niceTicks(lo, hi, n) {
@@ -323,6 +324,8 @@ async function computeOnce() {
       $("progbar").style.width = (100 * (done + 0.5) / total) + "%";
       await sleep();
     }
+    // the single-bed profile: no protocol involved, so it needs no scan length
+    s.bed = JSON.parse(PY.single_bed(JSON.stringify(s.spec), F_o, D_cyl));
     done++; $("progbar").style.width = (100 * done / total) + "%";
   }
   await refreshAtS(done, total);
@@ -375,10 +378,40 @@ function draw() {
   });
   legend($("leg2"), SERIES);
   const missing = SERIES.filter(s => s.sum && s.sum.infeasible).map(s => s.label);
+  drawBed();
   $("cap2").textContent = `Scan length ${S} cm. The ripple is the bed structure; ` +
     `the curves in the left panel are the minima of these.` +
     (missing.length ? ` Not drawn at this scan length: ${missing.join(", ")}.` : "");
   table();
+}
+
+/* The profile of a single bed position, and what the two system factors do to
+   it.  Nothing is recomputed when the buttons are pressed: eta, epsilon and r
+   all came back together, and the buttons only decide what multiplies what. */
+function drawBed() {
+  const host = $("chart3");
+  if (!SERIES.length || !SERIES[0].bed) { host.innerHTML = ""; return; }
+  const factor = b => (MUL_E ? b.epsilon : 1) * (MUL_R ? b.r : 1);
+  const ylab = (MUL_E ? "ε " : "") + "η(z)" + (MUL_R ? " r" : "");
+  lineChart(host, {
+    series: SERIES.map(s => ({
+      ...s, pts: s.bed.z.map((z, i) => [z / 10, s.bed.eta[i] * factor(s.bed)])
+    })),
+    log: LOGY, xlab: "axial position z (cm)", ylab: ylab, endLabels: false,
+    height: 300, aria: "single bed axial sensitivity profile"
+  });
+  legend($("leg3"), SERIES);
+  const F_o = +$("fo").value, D = +$("dcyl").value;
+  const parts = [];
+  if (!MUL_E && !MUL_R) parts.push("the bare axial sensitivity profile");
+  if (MUL_E) parts.push("ε, the detector-pair efficiency, which scales the whole curve");
+  if (MUL_R) parts.push("r, the resolution factor" +
+    (SERIES.some(s => !s.sum || !s.sum.has_tof) ? ", non-TOF for systems without" +
+      ` time of flight and so dependent on the ${D} cm cylinder` : ""));
+  $("cap3").textContent =
+    `One bed position in a ${D} cm cylinder — what every protocol is built from: ` +
+    parts.join("; ") + `. Multiplying by \u03c3\u2092\u00b3 as well (${(F_o).toFixed(1)} mm SLoG) ` +
+    `would give the SNR² of a single bed, in the units of the panels above.`;
 }
 
 function table() {
@@ -551,6 +584,13 @@ function bindTheme() {
   };
   $("th-d").onclick = () => set(true); $("th-l").onclick = () => set(false);
 }
+function bindFactors() {
+  const wire = (id, get, set) => {
+    $(id).onclick = () => { set(!get()); $(id).setAttribute("aria-pressed", get()); drawBed(); };
+  };
+  wire("mx-e", () => MUL_E, v => { MUL_E = v; });
+  wire("mx-r", () => MUL_R, v => { MUL_R = v; });
+}
 function bindScale() {
   const set = l => {
     LOGY = l; $("sc-log").setAttribute("aria-pressed", l);
@@ -559,7 +599,7 @@ function bindScale() {
   $("sc-log").onclick = () => set(true); $("sc-lin").onclick = () => set(false);
 }
 window.addEventListener("DOMContentLoaded", () => {
-  bindTheme(); bindScale();
+  bindTheme(); bindScale(); bindFactors();
   const live = { fo: v => (+v).toFixed(1), dcyl: v => v, smax: v => v, sat: v => v };
   for (const id in live) {
     const el = $(id), out = $(id + "-v");

@@ -213,3 +213,31 @@ def test_an_empty_field_means_no_limit_however_it_arrives():
     for blank in (None, "", 0, 0.0, JsNull()):
         assert api._number(blank) is None
     assert api._number("1.2") == 1.2 and api._number(1.2) == 1.2
+
+
+def test_the_single_bed_profile_is_what_a_one_bed_scan_would_give(cat):
+    """The panel showing one bed position must be the same physics as the rest of
+    the page, so that ε x eta x r x sigma_o^3 really is the SNR^2 of that bed."""
+    import slogpet as sp_pkg
+    for name in ("Biograph Vision Quadra", "Omni 128"):
+        spec = next(s for s in cat["systems"] if s["name"] == name)
+        bed = json.loads(api.single_bed(spec, 5.0, 200.0, 201))
+        sc, task = api.scanner_from(spec), sp.Task(5.0, 200.0)
+        one = sp_pkg.snr2(sc, task, 200.0, n_beds=1)
+        peak = max(bed["eta"]) * bed["epsilon"] * bed["r"] * bed["sigma_o3"]
+        assert peak == pytest.approx(one.snr2.max(), rel=1e-9), name
+        assert bed["epsilon"] == pytest.approx(sc.efficiency(), rel=1e-15)
+        assert bed["r"] == pytest.approx(sc.r(task), rel=1e-15)
+        assert bed["eta"][0] == 0.0 and bed["eta"][-1] == 0.0     # past the detector
+        assert len(bed["z"]) == len(bed["eta"]) == 201
+
+
+def test_the_single_bed_profile_needs_no_protocol(cat):
+    """It is the same curve whatever the scan length, which is why the panel has
+    no scan-length control and the ripple limit does not touch it."""
+    spec = next(s for s in cat["systems"] if s["name"] == "uMI Panorama GS")
+    assert api.single_bed(spec, 5.0, 200.0) == api.single_bed(spec, 5.0, 200.0)
+    other = json.loads(api.single_bed(spec, 5.0, 300.0))
+    same = json.loads(api.single_bed(spec, 5.0, 200.0))
+    # the object does change it: more attenuation, and a non-TOF r if applicable
+    assert max(other["eta"]) < max(same["eta"])
