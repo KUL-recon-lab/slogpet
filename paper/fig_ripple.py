@@ -4,7 +4,7 @@ from typing import Optional, Sequence, TYPE_CHECKING
 import numpy as np
 
 from slogpet import (sample_single_bed_profile, best_spacing_for_n_beds,
-                     coverage, tile_beds)
+                     bed_positions, coverage, tile_beds)
 
 from .style import figure_backend, finish, SEQ, HIGHLIGHT
 from .config import out, D_PET
@@ -19,8 +19,7 @@ def make(path: Optional[str] = DEFAULT, L_pet: float = 1000.0,
          D_cyl: float = 200.0, S: float = 1500.0,
          max_peak_to_trough: Optional[float] = None,
          profile_counts: Sequence[int] = (1, 2, 4, 5),
-         Ns: Sequence[int] = list(range(1, 15))
-         ) -> "Figure":
+         show_beds: bool = False) -> "Figure":
     """Why the best N is not a smooth function of S: the tiled profile ripples, and how
     much it ripples depends on N in a way that is not monotone.
 
@@ -37,9 +36,18 @@ def make(path: Optional[str] = DEFAULT, L_pet: float = 1000.0,
 
     ``profile_counts`` are the bed counts drawn on the right; any that the limit
     rules out are replaced by the next feasible ones.
+
+    ``show_beds`` adds the individual bed positions to the right-hand panel: one
+    faint copy of ``eta(z - z_n) / N`` per bed, which is what the drawn curve is
+    the sum of, and a tick at each bed centre.  It shows where the beds sit and
+    why the ripple is where it is -- the crests over the bed centres, the troughs
+    where two neighbouring copies have both fallen away.  Clearest with a single
+    entry in ``profile_counts``; with four curves at once the copies overlap each
+    other.  The default, False, is what the paper prints.
     """
     plt = figure_backend(path, **{"legend.fontsize": 7.5})
     profile = sample_single_bed_profile(L_pet, D_PET, D_cyl)
+    Ns = list(range(1, 15))
     res = {N: best_spacing_for_n_beds(profile, L_pet, S, N,
                                       max_peak_to_trough=max_peak_to_trough)
            for N in Ns}
@@ -120,6 +128,15 @@ def make(path: Optional[str] = DEFAULT, L_pet: float = 1000.0,
     for N, col in zip(shown, SEQ):
         d = res[N].spacing_mm
         p = tile_beds(profile, N, d, Z)
+        if show_beds:
+            # what the curve is the sum of, and where those beds are
+            centres = bed_positions(N, d)
+            for z_n in centres:
+                a3.plot(Z / 10, profile(Z - z_n) / N, color=col, lw=0.5,
+                        alpha=0.55, zorder=1)
+            a3.plot(centres / 10, np.full(N, 0.02), marker="|", ls="none",
+                    color=col, ms=6.5, mew=1.0, clip_on=False,
+                    transform=a3.get_xaxis_transform())
         inr = np.abs(Z) <= S / 2
         lbl = (r"$N=1$ (single bed)" if N == 1 else
                r"$N=%d$, $%.0f\%%$ overlap" % (N, 100 * (1 - d / L_pet)))
