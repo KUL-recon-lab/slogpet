@@ -30,8 +30,9 @@ from typing import Iterable, List, Optional, Sequence
 import numpy as np
 
 from .geometry import MU_WATER
-from .protocol import (H_LATTICE, best_for_N, eta_lattice,
-                       lattice_integral, optimise_beds, tiled_profile)
+from .protocol import (PROFILE_STEP_MM, best_spacing_for_n_beds, coverage,
+                       optimise_bed_positions, sample_single_bed_profile,
+                       tile_beds)
 from .resolution import FWHM
 from .types import AxialProfile, Protocol, SNRResult, Scanner, Task
 
@@ -43,16 +44,17 @@ N_Z = 401               # points at which the multi-bed profile is reported
 
 @lru_cache(maxsize=256)
 def axial_profile(scanner: Scanner, D_cyl: float, mu: float = MU_WATER,
-                  h: float = H_LATTICE) -> AxialProfile:
+                  step_mm: float = PROFILE_STEP_MM) -> AxialProfile:
     """``eta(z)`` for one scanner in a water cylinder of diameter ``D_cyl``.
 
     Memoised: the result depends on neither the SLoG size nor the scan length,
     so a whole family of tasks and protocols reuses one profile.
     """
-    lat = eta_lattice(scanner.L_pet, scanner.D_pet, D_cyl, mu=mu,
-                      L_mrd=scanner.L_mrd, h=h)
-    return AxialProfile(scanner=scanner, D_cyl=D_cyl, mu=mu, lattice=lat,
-                        integral=lattice_integral(lat))
+    samples = sample_single_bed_profile(scanner.L_pet, scanner.D_pet, D_cyl,
+                                        mu_per_mm=mu, L_mrd_mm=scanner.L_mrd,
+                                        step_mm=step_mm)
+    return AxialProfile(scanner=scanner, D_cyl=D_cyl, mu=mu, samples=samples,
+                        integral=samples.integral_mm)
 
 
 @lru_cache(maxsize=4096)
@@ -63,15 +65,23 @@ def optimal_protocol(profile: AxialProfile, scan_length: float,
     Memoised as well: this is the expensive step once the profile exists, and an
     interactive frontend revisits the same scan lengths constantly."""
     L = profile.scanner.L_pet
-    N, d, M = optimise_beds(profile.lattice, L, scan_length, Nmax=Nmax, tol=tol)
-    return Protocol(scan_length=scan_length, n_beds=N, spacing=d, min_eta=M, L_pet=L)
+    best = optimise_bed_positions(profile.samples, L, scan_length,
+                                  max_beds=Nmax, tolerance=tol)
+    return Protocol(scan_length=scan_length, n_beds=best.n_beds,
+                    spacing=best.spacing_mm, min_eta=best.coverage.min_eta,
+                    mean_eta=best.coverage.mean_eta,
+                    max_eta=best.coverage.max_eta, L_pet=L)
 
 
 def protocol_for_N(profile: AxialProfile, scan_length: float, N: int) -> Protocol:
     """The best protocol with exactly ``N`` bed positions."""
     L = profile.scanner.L_pet
-    M, d = best_for_N(profile.lattice, L, scan_length, N)
-    return Protocol(scan_length=scan_length, n_beds=N, spacing=d, min_eta=M, L_pet=L)
+    choice = best_spacing_for_n_beds(profile.samples, L, scan_length, N)
+    spacing = choice.spacing_mm
+    stats = coverage(profile.samples, N, spacing, scan_length)
+    return Protocol(scan_length=scan_length, n_beds=N, spacing=spacing,
+                    min_eta=stats.min_eta, mean_eta=stats.mean_eta,
+                    max_eta=stats.max_eta, L_pet=L)
 
 
 def snr2_value(epsilon: float, eta_value, r: float, F_o: float, scale: float = 1.0):
@@ -81,7 +91,7 @@ def snr2_value(epsilon: float, eta_value, r: float, F_o: float, scale: float = 1
 
 def _eta_N(profile: AxialProfile, protocol: Protocol, z) -> np.ndarray:
     """The tiled profile ``eta_N(z) = (1/N) sum_n eta(z - z_n)``."""
-    return tiled_profile(profile.lattice, protocol.n_beds, protocol.spacing, z)
+    return tile_beds(profile.samples, protocol.n_beds, protocol.spacing, z)
 
 
 def snr2(scanner: Scanner, task: Task, scan_length: float,

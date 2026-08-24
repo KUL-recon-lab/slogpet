@@ -35,8 +35,10 @@ size or the scan length pays for it only once per (scanner, cylinder).
     sp.S_ideal_closed(L_pet, D_pet, L_s, L_mrd)    # NEMA line-source sensitivity
     sp.r_tof(F_t, F_y, F_z, F_o)                   # resolution factor, TOF
     sp.r_nontof(F_y, F_z, F_o, D_cyl)              # resolution factor, no TOF
-    sp.eta_lattice(L_pet, D_pet, D_cyl)            # -> Lattice, eta on a 1 mm grid
-    sp.optimise_beds(lattice, L_pet, S)            # -> (N*, spacing*, min eta_N)
+    sp.sample_single_bed_profile(L_pet, D_pet, D_cyl)   # -> SampledProfile
+    sp.tile_beds(profile, n_beds, spacing_mm, z)        # -> eta_N(z)
+    sp.optimise_bed_positions(profile, L_pet, S)        # -> BedArrangement
+    sp.coverage(profile, n_beds, spacing_mm, S)         # -> min, mean, max
 
 ## Published systems
 
@@ -59,19 +61,36 @@ system has an efficiency.
 
 ## The bed search
 
-`eta` is tabulated on a 1 mm lattice and bed spacings are multiples of 2 mm, so
-that every bed position is an exact number of lattice steps. `eta_N` is then
-piecewise linear with all its knots on the lattice, which means its minimum over
-the scan range is attained *at* a lattice point: the reported minimum is the
-minimum, not an estimate of it. Evaluating it becomes a gather rather than an
+`slogpet/protocol.py` is written to be read in order: sampling the single-bed
+profile, reading values off that grid, overlapping shifted copies, choosing the
+spacing for a given bed count, then choosing the bed count. Each step has its own
+function and its own docstring explaining why it is the way it is.
+
+`eta` is tabulated on a 1 mm grid and bed spacings are multiples of 2 mm, so that
+every bed position is an exact whole number of grid steps. `eta_N` is then
+piecewise linear with all its knots on the grid, which means its minimum over the
+scan range is attained *at* a grid point (or at an end of the range): the reported
+minimum is the minimum, not an estimate of it. Evaluating it becomes a gather rather than an
 interpolation, and the offset search can be exhaustive at 1 cm before refining,
 so it cannot settle in the wrong local optimum. About thirty times faster than
 the continuous search it replaced, and slightly more accurate.
 
 Both steps are module constants — `slogpet.H_LATTICE` and `slogpet.H_SEARCH` —
-and `eta_lattice(..., h=0.25)` will refine the first if you want to check that
+and `sample_single_bed_profile(..., step_mm=0.25)` refines the first if you want
+to check that
 the answer does not depend on it. It does not: a fourfold refinement moves the
 minimum sensitivity by well under a per cent.
+
+`optimise_bed_positions` returns a `BedArrangement`, whose `coverage` reports the
+minimum, the mean and the maximum of `eta_N` over the scan range:
+
+    best = sp.optimise_bed_positions(profile, L_pet=1060.0, scan_length_mm=1000.0)
+    best.n_beds, best.spacing_mm            # 2 beds, 686 mm apart
+    best.overlap_percent(1060.0)            # 35 %
+    best.coverage.min_eta                   # the worst point -- what is optimised
+    best.coverage.mean_eta                  # (1/S) int eta_N dz -- total counts
+    best.coverage.max_eta                   # the crest of the ripple
+    best.coverage.ripple                    # peak-to-trough, relative to the mean
 
 ## Conventions
 

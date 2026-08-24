@@ -106,6 +106,8 @@ def summary(spec, F_o, D_cyl, S):
         "overlap": res.overlap,
         "spacing": res.protocol.spacing,
         "min_eta": res.protocol.min_eta,
+        "mean_eta": res.protocol.mean_eta,
+        "max_eta": res.protocol.max_eta,
         "snr2_min": res.snr2_min,
         "F_t": sc.F_t,
         "has_tof": sc.has_tof,

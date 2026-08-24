@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 
 import slogpet as sp
-from slogpet import eta_lattice, fwhm_of, best_for_N, optimise_beds
+from slogpet import (sample_single_bed_profile, profile_fwhm,
+                     best_spacing_for_n_beds, optimise_bed_positions,
+                     coverage)
 from slogpet.snr import _eta_N
 
 LP, DP, DC = 1000.0, 740.0, 200.0
@@ -16,7 +18,7 @@ LP, DP, DC = 1000.0, 740.0, 200.0
 
 @pytest.fixture(scope="module")
 def profile():
-    return eta_lattice(LP, DP, DC)
+    return sample_single_bed_profile(LP, DP, DC)
 
 
 @pytest.fixture(scope="module")
@@ -26,9 +28,9 @@ def prof_obj():
 
 
 def test_a_single_bed_has_no_spacing(profile):
-    m, d = best_for_N(profile, LP, 200.0, 1)
-    assert d == 0.0
-    assert m == pytest.approx(profile(np.array([100.0]))[0], rel=1e-12)
+    choice = best_spacing_for_n_beds(profile, LP, 200.0, 1)
+    assert choice.spacing_mm == 0.0
+    assert choice.min_eta == pytest.approx(profile(np.array([100.0]))[0], rel=1e-12)
 
 
 def test_tiling_conserves_the_integral(prof_obj):
@@ -59,48 +61,49 @@ def test_the_reported_minimum_is_the_actual_minimum(prof_obj, S):
 
 @pytest.mark.parametrize("S", [200.0, 500.0, 1000.0, 1800.0])
 def test_the_chosen_bed_count_is_within_tolerance_of_the_best(profile, S):
-    """optimise_beds deliberately returns the smallest N within 3 per cent of the
-    best, not the argmax.  Check both halves of that promise."""
-    N, d, M = optimise_beds(profile, LP, S)
-    best = max(best_for_N(profile, LP, S, n)[0] for n in range(1, 20))
-    assert M >= 0.97 * best
-    if N > 1:
-        below = max(best_for_N(profile, LP, S, n)[0] for n in range(1, N))
+    """optimise_bed_positions deliberately returns the smallest N within 3 per
+    cent of the best, not the argmax.  Check both halves of that promise."""
+    got = optimise_bed_positions(profile, LP, S)
+    best = max(best_spacing_for_n_beds(profile, LP, S, n).min_eta
+               for n in range(1, 20))
+    assert got.coverage.min_eta >= 0.97 * best
+    if got.n_beds > 1:
+        below = max(best_spacing_for_n_beds(profile, LP, S, n).min_eta
+                    for n in range(1, got.n_beds))
         assert below < 0.97 * best          # no smaller N would have done
 
 
 def test_more_beds_never_hurt_if_you_are_allowed_to_choose_the_spacing(profile):
     S = 1800.0
-    best = -np.inf
-    for N in range(1, 12):
-        m, _d = best_for_N(profile, LP, S, N)
-        best = max(best, m)
-    # the envelope is what optimise_beds compares against
-    assert best >= best_for_N(profile, LP, S, 1)[0]
+    best = max(best_spacing_for_n_beds(profile, LP, S, N).min_eta
+               for N in range(1, 12))
+    # the envelope is what optimise_bed_positions compares against
+    assert best >= best_spacing_for_n_beds(profile, LP, S, 1).min_eta
 
 
 def test_a_longer_scan_needs_at_least_as_many_beds(profile):
-    counts = [optimise_beds(profile, LP, S)[0] for S in
+    counts = [optimise_bed_positions(profile, LP, S).n_beds for S in
               (200.0, 400.0, 700.0, 1000.0, 1400.0, 1800.0, 2000.0)]
     assert all(a <= b for a, b in zip(counts, counts[1:])), counts
 
 
 def test_a_longer_scan_is_never_easier(profile):
-    mins = [optimise_beds(profile, LP, S)[2] for S in (200.0, 500.0, 1000.0, 1800.0)]
+    mins = [optimise_bed_positions(profile, LP, S).coverage.min_eta
+            for S in (200.0, 500.0, 1000.0, 1800.0)]
     assert all(a >= b for a, b in zip(mins, mins[1:]))
 
 
 def test_a_single_bed_suffices_for_a_short_scan(profile):
-    N, d, _M = optimise_beds(profile, LP, 100.0)
-    assert N == 1 and d == 0.0
+    got = optimise_bed_positions(profile, LP, 100.0)
+    assert got.n_beds == 1 and got.spacing_mm == 0.0
 
 
 def test_the_fwhm_rule_of_thumb(profile):
     """The FWHM of eta is roughly the useful axial field of view, and a scan
     shorter than that needs one bed."""
-    W = fwhm_of(profile)
+    W = profile_fwhm(profile)
     assert 0.3 * LP < W < 0.8 * LP
-    assert optimise_beds(profile, LP, 0.8 * W)[0] == 1
+    assert optimise_bed_positions(profile, LP, 0.8 * W).n_beds == 1
 
 
 def test_overlap_is_reported_only_for_multi_bed(prof_obj):
@@ -125,29 +128,90 @@ def test_the_reported_minimum_is_exact_not_sampled(prof_obj):
 def test_the_two_stage_search_matches_an_exhaustive_one(profile, S, N):
     """best_for_N scans the offset every 10 mm and then refines.  Check that the
     coarse pass never lands in the wrong basin, by scanning every offset."""
-    from slogpet.protocol import _bed_offsets, _gather
-    h = profile.h
-    kz = int(np.floor(S / 2 / h))
-    iz = np.arange(-kz, kz + 1) + profile.i0
-    a = _bed_offsets(N)
-    ms = np.arange(0, int((LP + S) / (N - 1) / (2 * h)) + 1)
-    exhaustive = _gather(profile, ms, a, iz).min(axis=1).max()
-    got, _d = best_for_N(profile, LP, S, N)
-    assert got == pytest.approx(exhaustive, rel=1e-9)
+    from slogpet.protocol import _bed_index_offsets, _tile_beds_on_grid
+    step = profile.step_mm
+    z_indices = profile.indices_within(S / 2)
+    offsets = _bed_index_offsets(N)
+    every = np.arange(0, int((LP + S) / (N - 1) / (2 * step)) + 1)
+    exhaustive = _tile_beds_on_grid(profile, every, offsets, z_indices).min(axis=1).max()
+    assert best_spacing_for_n_beds(profile, LP, S, N).min_eta == pytest.approx(
+        exhaustive, rel=1e-9)
 
 
 def test_the_lattice_step_does_not_change_the_answer():
     """1 mm is a choice, not a constraint.  Refining it fourfold moves the
     minimum sensitivity by well under a per cent."""
-    fine = eta_lattice(LP, DP, DC, h=0.25)
-    coarse = eta_lattice(LP, DP, DC, h=1.0)
+    fine = sample_single_bed_profile(LP, DP, DC, step_mm=0.25)
+    coarse = sample_single_bed_profile(LP, DP, DC, step_mm=1.0)
     for S in (300.0, 800.0, 1500.0, 2000.0):
-        a = optimise_beds(coarse, LP, S)[2]
-        b = optimise_beds(fine, LP, S)[2]
+        a = optimise_bed_positions(coarse, LP, S).coverage.min_eta
+        b = optimise_bed_positions(fine, LP, S).coverage.min_eta
         assert a == pytest.approx(b, rel=1e-2), (S, a, b)
 
 
 def test_tiling_a_single_bed_returns_the_profile(profile):
-    from slogpet.protocol import tiled_profile
+    from slogpet.protocol import tile_beds
     z = np.linspace(-LP / 2, LP / 2, 501)
-    assert np.allclose(tiled_profile(profile, 1, 0.0, z), profile(z))
+    assert np.allclose(tile_beds(profile, 1, 0.0, z), profile(z))
+
+
+# --------------------------------------------------- the reported statistics
+def test_the_three_statistics_are_ordered(profile):
+    for S in (200.0, 700.0, 1500.0, 2000.0):
+        got = optimise_bed_positions(profile, LP, S)
+        c = got.coverage
+        assert 0.0 <= c.min_eta <= c.mean_eta <= c.max_eta
+
+
+def test_the_search_and_the_report_agree_on_the_minimum(profile):
+    """best_spacing_for_n_beds localises the trough to go fast; coverage looks at
+    every grid point in the range.  They must not disagree."""
+    for S in (300.0, 900.0, 1700.0):
+        for N in (1, 2, 3, 5):
+            choice = best_spacing_for_n_beds(profile, LP, S, N)
+            reported = coverage(profile, N, choice.spacing_mm, S)
+            assert reported.min_eta == pytest.approx(choice.min_eta, rel=1e-12)
+
+
+def test_the_mean_is_the_integral_over_the_range(profile):
+    """(1/S) int eta_N dz, checked against a dense independent quadrature."""
+    from slogpet.protocol import tile_beds
+    for S in (400.0, 1200.0):
+        got = optimise_bed_positions(profile, LP, S)
+        z = np.linspace(-S / 2, S / 2, 40001)
+        dense = np.trapezoid(tile_beds(profile, got.n_beds, got.spacing_mm, z), z) / S
+        assert got.coverage.mean_eta == pytest.approx(dense, rel=1e-6)
+
+
+def test_a_single_bed_peaks_at_the_centre(profile):
+    """With one bed and a range inside the detector, the maximum is eta(0) and
+    the minimum is at the ends."""
+    S = 200.0
+    c = coverage(profile, 1, 0.0, S)
+    assert c.max_eta == pytest.approx(profile(np.array([0.0]))[0], rel=1e-12)
+    assert c.min_eta == pytest.approx(profile(np.array([S / 2]))[0], rel=1e-12)
+
+
+def test_more_beds_flatten_the_profile(profile):
+    """The ripple is what the bed count buys: covering 180 cm with one bed leaves
+    most of the range uncovered, and adding beds evens it out."""
+    S = 1800.0
+    ripples = [coverage(profile, N, best_spacing_for_n_beds(profile, LP, S, N).spacing_mm,
+                        S).ripple for N in (2, 3, 4, 5)]
+    assert ripples[-1] < ripples[0]
+
+
+def test_the_mean_is_bounded_by_conservation(profile):
+    """Tiling conserves the integral of eta, so the mean over the scan range can
+    never exceed (int eta dz) / S -- whatever the arrangement."""
+    for S in (600.0, 1400.0, 2000.0):
+        got = optimise_bed_positions(profile, LP, S)
+        assert got.coverage.mean_eta <= profile.integral_mm / S * (1 + 1e-12)
+
+
+def test_overlap_percent_matches_the_spacing(profile):
+    got = optimise_bed_positions(profile, LP, 1800.0)
+    assert got.n_beds > 1
+    assert got.overlap_percent(LP) == pytest.approx(
+        100.0 * (1.0 - got.spacing_mm / LP), rel=1e-12)
+    assert optimise_bed_positions(profile, LP, 100.0).overlap_percent(LP) is None

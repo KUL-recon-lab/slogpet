@@ -2,7 +2,7 @@
 the minimum of eta_N, the bed count, and the overlap."""
 import numpy as np
 
-from slogpet import eta_lattice, optimise_beds
+from slogpet import sample_single_bed_profile, optimise_bed_positions
 
 from .style import use_pgf, LENGTH_RAMP
 from .config import out, D_PET, SCANNERS, SCANLEN, CYLS
@@ -18,14 +18,15 @@ def make(path=DEFAULT):
     for col, D_cyl in enumerate(CYLS):
         axes[3, col].axhline(50.0, color="0.55", lw=0.6, ls=(0, (1, 2)))
         for L_pet, lab in SCANNERS:
-            lat = eta_lattice(L_pet, D_PET, D_cyl)
-            res = [optimise_beds(lat, L_pet, S) for S in Ss]
-            M = [r[2] for r in res]
+            profile = sample_single_bed_profile(L_pet, D_PET, D_cyl)
+            best = [optimise_bed_positions(profile, L_pet, S) for S in Ss]
+            M = [b.coverage.min_eta for b in best]
             axes[0, col].plot(Ss/10, M, color=colours[L_pet],
                               label=r"$L_{\mathrm{PET}}=%s$\,cm" % lab)
             axes[1, col].plot(Ss/10, M, color=colours[L_pet])
-            axes[2, col].step(Ss/10, [r[0] for r in res], color=colours[L_pet], where="post")
-            ov = [100*(1 - r[1]/L_pet) if r[0] > 1 else np.nan for r in res]
+            axes[2, col].step(Ss/10, [b.n_beds for b in best],
+                              color=colours[L_pet], where="post")
+            ov = [b.overlap_percent(L_pet) if b.n_beds > 1 else np.nan for b in best]
             axes[3, col].plot(Ss/10, ov, color=colours[L_pet])
         axes[0, col].set_ylim(bottom=0.0)
         axes[1, col].set_yscale("log")

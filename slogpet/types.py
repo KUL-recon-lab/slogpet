@@ -13,7 +13,7 @@ from typing import Callable, Optional, Sequence, Tuple, Union
 import numpy as np
 
 from .geometry import MU_WATER, S_ideal_closed
-from .protocol import Lattice
+from .protocol import SampledProfile, ScanCoverage
 from .resolution import FWHM, C_OVER_2, r_of
 
 __all__ = ["Scanner", "Task", "Protocol", "AxialProfile", "SNRResult", "L_S_NEMA"]
@@ -113,12 +113,19 @@ class Protocol:
     n_beds: int
     spacing: float                  # mm; 0 for a single bed
     min_eta: float                  # min over |z| <= S/2 of eta_N
+    mean_eta: float = np.nan        # (1/S) int eta_N dz over the scan range
+    max_eta: float = np.nan         # max over the scan range
     L_pet: float = np.nan           # kept so the overlap can be expressed
 
     @property
     def overlap(self) -> Optional[float]:
         """Bed overlap in per cent, or None for a single-bed acquisition."""
         return None if self.n_beds == 1 else 100.0 * (1.0 - self.spacing / self.L_pet)
+
+    @property
+    def coverage(self) -> ScanCoverage:
+        """The three statistics together."""
+        return ScanCoverage(self.min_eta, self.mean_eta, self.max_eta)
 
 
 @dataclass(frozen=True)
@@ -133,24 +140,24 @@ class AxialProfile:
     scanner: Scanner
     D_cyl: float
     mu: float
-    lattice: Lattice = field(compare=False)
+    samples: SampledProfile = field(compare=False)
     integral: float = np.nan             # int eta dz, conserved when beds are tiled
 
     def __call__(self, z):
-        return self.lattice(z)
+        return self.samples(z)
 
     @property
-    def h(self) -> float:
-        """Lattice step, mm."""
-        return self.lattice.h
+    def step_mm(self) -> float:
+        """Spacing of the grid the profile is tabulated on."""
+        return self.samples.step_mm
 
     @property
     def z(self):
-        return self.lattice.z
+        return self.samples.z_mm
 
     @property
     def values(self):
-        return self.lattice.values
+        return self.samples.values
 
 
 @dataclass

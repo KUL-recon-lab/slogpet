@@ -1,7 +1,7 @@
 """Figure 5: why the best bed count is not a smooth function of the scan length."""
 import numpy as np
 
-from slogpet import eta_lattice, best_for_N, tiled_profile
+from slogpet import sample_single_bed_profile, best_spacing_for_n_beds, tile_beds
 
 from .style import use_pgf, SEQ, HIGHLIGHT
 from .config import out, D_PET
@@ -13,16 +13,16 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
     """Why the best N is not a smooth function of S: the tiled profile ripples, and how
     much it ripples depends on N in a way that is not monotone."""
     plt = use_pgf(**{"legend.fontsize": 7.5})
-    lat = eta_lattice(L_pet, D_PET, D_cyl)
+    profile = sample_single_bed_profile(L_pet, D_PET, D_cyl)
     Ns = list(range(1, 15))
-    res = {N: best_for_N(lat, L_pet, S, N) for N in Ns}
-    best = max(M for M, _ in res.values())
-    Nrep = next(N for N in Ns if res[N][0] >= 0.97*best)
+    res = {N: best_spacing_for_n_beds(profile, L_pet, S, N) for N in Ns}
+    best = max(choice.min_eta for choice in res.values())
+    Nrep = next(N for N in Ns if res[N].min_eta >= 0.97*best)
 
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(6.0, 2.5))
     a1.axhspan(0.97*best, best, color="0.88", zorder=0)
-    a1.plot(Ns, [res[N][0] for N in Ns], "o-", color=SEQ[2], ms=4)
-    a1.plot([Nrep], [res[Nrep][0]], "o", color=HIGHLIGHT, ms=7, mfc="none", mew=1.8)
+    a1.plot(Ns, [res[N].min_eta for N in Ns], "o-", color=SEQ[2], ms=4)
+    a1.plot([Nrep], [res[Nrep].min_eta], "o", color=HIGHLIGHT, ms=7, mfc="none", mew=1.8)
     a1.set_xlabel("number of bed positions $N$")
     a1.set_ylabel(r"$\min_{|z|\le S/2}\eta_N(z)$")
     a1.grid(True, lw=0.4, color="0.85")
@@ -37,8 +37,8 @@ def make(path=DEFAULT, L_pet=1000.0, D_cyl=200.0, S=1500.0):
     Z = np.linspace(-Zw, Zw, 1601)
     a2.axvspan(-S/20, S/20, color="0.90", zorder=0)
     for N, col in zip((1, 2, 4, 5), SEQ):
-        M, d = res[N]
-        p = tiled_profile(lat, N, d, Z)
+        M, d = res[N].min_eta, res[N].spacing_mm
+        p = tile_beds(profile, N, d, Z)
         inr = np.abs(Z) <= S/2
         lbl = (r"$N=1$ (single bed)" if N == 1 else
                r"$N=%d$, %.0f\%% overlap" % (N, 100*(1-d/L_pet)))
