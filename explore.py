@@ -1,3 +1,18 @@
+# %% [markdown]
+# # Comparing PET systems on a resolution-dependent task
+#
+# How well a PET system detects a small lesion depends on three things that pull
+# against each other: how much of the emitted signal it catches, how sharply it
+# resolves the lesion, and how evenly it covers the range being scanned.  
+#
+# **To use it:** edit the parameters in the second cell, then run everything.
+# Nothing is sent anywhere; the calculation runs in your own browser.
+#
+# ## Setting up
+#
+# The list printed below is every system the package knows about; the names are
+# what the next cell expects.
+
 # %%
 import numpy as np
 import scipy.integrate  # dummy import of scipy needed for Pyodide - leave it
@@ -19,6 +34,28 @@ for scanner in all_predified_systems:
 
 print()
 
+
+# %% [markdown]
+# ## What to compare, and on what task
+#
+# Everything you are likely to want to change is here.
+#
+# * `system_names` -- published systems, by name, from the list above.
+# * `custom_scanners` -- a system of your own.  Give either `epsilon`, the
+#   detector-pair efficiency, or `S_nema`, the NEMA NU 2 sensitivity in cps/kBq;
+#   the package derives one from the other and the geometry.
+# * `task` -- the lesion (`F_o`, its size as a Gaussian FWHM in mm) and the body
+#   it sits in (`D_cyl`, a water cylinder).  A smaller lesion asks more of the
+#   resolution, so which system wins can change with `F_o`.
+# * `scan_lengths_mm` -- the axial range to cover, swept from a single organ to
+#   a total-body scan.
+# * `ripple_limit` -- how uneven the sensitivity along the range is allowed to
+#   be.  `None` lets the optimiser maximise the worst point regardless of the
+#   ripple, which is what the paper does; `1.2` insists the best point is at
+#   most 20 % above the worst, which costs sensitivity and usually more beds.
+#
+# Re-running this cell rebuilds `scanners`, so an edit here is picked up by
+# everything below.
 
 # %%
 # setup scanners to be compared
@@ -44,8 +81,8 @@ scan_lengths_mm = np.linspace(50.0, 2000.0, 41)
 # max ripple amplitude of the sensitivity axial profile (max_sens(z) / min_sens(z)) allowed in the optimal bed protocol; None means no limit
 ripple_limit = None   
 
-## %%
-# ------------------------------ setup --------------------------------------
+# %%
+# setup the scanners to be compared, from the names above and any custom ones
 
 scanners = []
 for name in system_names:
@@ -57,6 +94,27 @@ for name in system_names:
 if custom_scanners is not None:
     scanners.extend(custom_scanners)
 
+
+# %% [markdown]
+# ## One bed position: where the systems separate
+#
+# `eta(z)` is the fraction of a point source's emissions the detector sees at
+# axial position `z`, for a single bed position.  It peaks at the centre of the
+# detector and falls to zero at its ends, and it is what every multi-bed
+# acquisition is built from.
+#
+# The three panels multiply it up, one factor at a time:
+#
+# 1. `eta(z)` alone -- geometry.  Note how little the *peaks* differ: a longer
+#    detector buys width, not height.
+# 2. times `epsilon`, the detector-pair efficiency -- how many of the pairs that
+#    reach the crystals are actually recorded.
+# 3. times `r`, the resolution factor -- how much of the signal survives the
+#    system's spatial and timing resolution for a lesion of this size.  For a
+#    system without time of flight this depends on the body diameter too.
+#
+# The systems look alike in the first panel and fan out by a large factor in the
+# third: the profile is not where the difference lives.
 
 # %%
 # -------------
@@ -88,8 +146,26 @@ ax[0].set_ylabel(r"$\eta(z)$")
 ax[1].set_ylabel(r"$\varepsilon \, \eta(z)$")
 ax[2].set_ylabel(r"$r \, \varepsilon \, \eta(z)$")
 ax[0].legend()
-fig.show()
 
+
+# %% [markdown]
+# ## Covering a range: how many bed positions, and how far apart
+#
+# A scan range longer than the detector is covered by moving the patient through
+# in steps, each acquired for the same fraction of the total time.  The tiled
+# profile `eta_N(z)` ripples -- highest where neighbouring bed positions overlap,
+# lowest between them -- and what matters clinically is the worst point.  So the
+# package maximises `min eta_N` over the range, over both the number of beds and
+# their spacing, and prefers a smaller bed count when it is within 3 % of the
+# best.
+#
+# The panels show what it chose: the bed count, the overlap between neighbouring
+# positions, and the sensitivity at the worst point.  The bed count is a step
+# function of the scan length, and the overlap is not monotone -- both are
+# consequences of the ripple, not of the search.
+#
+# With a `ripple_limit` set, a scan length where no arrangement can meet it has
+# no protocol at all; those points come back as `None` and leave a gap.
 
 # %%
 # calculate the optimal bed protocols for each scanner and scan length
@@ -119,7 +195,22 @@ ax2[1].set_ylabel(r"optimal overlap")
 ax2[2].set_ylabel(r"$\min_z \eta_N(z)$")
 ax2[0].legend()
 
-fig2.show()
+
+# %% [markdown]
+# ## Detectability
+#
+# Putting it together.  The squared signal-to-noise ratio of the Hotelling
+# observer for this task factorises as
+#
+# `SNR^2(z) = T x [S^2 sigma_o^3 / (16 pi sqrt(pi) B)] x epsilon eta_N(z) x r`
+#
+# where the first bracket describes the patient and the acquisition time and is
+# the same for every system compared.  What is plotted below is the system's own
+# part, `epsilon eta_N r sigma_o^3`, at the worst point of the scan range -- the
+# quantity that actually distinguishes one scanner from another.
+#
+# The log panel is the useful one for comparing systems that differ by more than
+# a factor of a few.
 
 # %%
 # calculate the minimum SNR^2 for each scanner and scan length, using the optimal protocols
@@ -147,4 +238,13 @@ ax3[0].set_ylabel(r"minimum SNR$^2$")
 ax3[1].set_ylabel(r"minimum SNR$^2$")
 ax3[0].legend()
 
-fig3.show()
+
+# %% [markdown]
+# ---
+# The figures above are drawn as each cell runs.  The call below matters only at
+# a terminal: `python explore.py` would otherwise exit and take its windows with
+# it.  In a notebook, and in ipython with `%matplotlib`, the figures have already
+# been shown and this returns at once.
+
+# %%
+plt.show()
