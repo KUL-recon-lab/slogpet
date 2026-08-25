@@ -16,13 +16,15 @@ import numpy as np
 import pandas as pd
 from bokeh.io import output_file, output_notebook, show
 from bokeh.layouts import gridplot
-from bokeh.models import GlyphRenderer, HoverTool, Legend, LegendItem, Range1d
+from bokeh.models import (ColumnDataSource, CrosshairTool, CustomJS,
+                          GlyphRenderer, HoverTool, Legend, LegendItem, Range1d,
+                          Span)
 from bokeh.plotting import figure
 
 from slogpet.resolution import C_OVER_2      # mm per ps, for CTR <-> F_t
 
 __all__ = ["COLOURS", "IN_NOTEBOOK", "in_notebook", "panel", "draw",
-           "shared_legend", "series", "systems_table", "show_table"]
+           "readout", "shared_legend", "series", "systems_table", "show_table"]
 
 # Colour-vision checked; cycled if you compare more systems than there are.
 COLOURS = ("#2a78d6", "#eda100", "#d55181", "#008300", "#7a5195", "#4a4a48")
@@ -65,8 +67,7 @@ def panel(y_label: str, x_label: Optional[str] = None,
     p = figure(width=WIDTH, height=HEIGHT, x_axis_label=x_label,
                y_axis_label=y_label, y_axis_type=y_axis_type,
                tools="pan,box_zoom,wheel_zoom,reset,save", **shared)
-    p.add_tools(HoverTool(tooltips=[("", "$name"), ("x", "$x{0.0}"),
-                                    ("y", "$y{0.000 a}")], mode="vline"))
+    # the hover readout is added by draw(), once every curve is on the panel
     p.grid.grid_line_alpha = 0.35
     p.toolbar.logo = None
     return p
@@ -74,10 +75,95 @@ def panel(y_label: str, x_label: Optional[str] = None,
 
 def draw(panels: Sequence[figure], filename: str) -> None:
     """Show a stack of panels: beneath the cell in a notebook, in a browser tab
-    from a script.  One toolbar drives all of them."""
+    from a script.  One toolbar drives all of them, one crosshair follows the
+    pointer through all of them, and each answers a hover with a single box.
+    """
     if not IN_NOTEBOOK:
         output_file(filename, title="SLoG PET explorer")
+    label = next((p.xaxis[0].axis_label for p in panels if p.xaxis[0].axis_label),
+                 "x")
+    # one Span shared by every panel's crosshair is what links them: the panels
+    # share an x range, so the pointer marks the same x in all of them
+    marker = Span(dimension="height", line_color="#8a8a88", line_dash="dashed",
+                  line_alpha=0.7)
+    for p in panels:
+        readout(p, label)
+        p.add_tools(CrosshairTool(overlay=marker))
     show(gridplot([[p] for p in panels], merge_tools=True, toolbar_location="right"))
+
+
+def _texts(y: np.ndarray, fmt: str) -> list:
+    """A column of already-formatted values: whole numbers whole, gaps as -."""
+    finite = y[np.isfinite(y)]
+    whole = finite.size > 0 and bool(np.all(finite == np.rint(finite)))
+    return ["-" if not np.isfinite(v) else ("%d" % v if whole else fmt % v)
+            for v in y]
+
+
+def readout(p: figure, x_label: str = "x", fmt: str = "%.3g") -> None:
+    """One tooltip box per panel, with a row per curve, instead of one box each.
+
+    A hover tool answers for every renderer it hits, so a panel carrying four
+    systems replies to a pointer with four boxes that overlap each other and
+    cover the curves.  What is wanted is the readout of a crosshair: one box,
+    one row per system, at the x the pointer is at.
+
+    Bokeh will do that for a *single* renderer whose source holds every series
+    as a column, so that is what is built here -- an invisible line along the
+    top of the panel, carrying the values of all the real ones, and the only
+    renderer the hover is attached to.  The curves themselves stay hover-free.
+
+    Curves are read on the first one's x grid; a curve tabulated on a different
+    grid is interpolated onto it and left blank outside its own range rather
+    than extrapolated.  Hiding a system from the legend drops its row from the
+    box.  Values are formatted here, in Python, rather than by a numeral format
+    in the tooltip: three significant digits keep a small number small instead
+    of rounding it to zero, a whole number of beds stays whole, and a gap in a
+    curve reads as ``-`` rather than as ``NaN``.
+    """
+    curves = [r for r in p.renderers if isinstance(r, GlyphRenderer) and r.name]
+    if not curves:
+        return
+
+    grid = np.asarray(curves[0].data_source.data["x"], dtype=float)
+    columns: Dict[str, Any] = {"x": grid}
+    values, fields, labels = [], [], []
+    for i, renderer in enumerate(curves):
+        x = np.asarray(renderer.data_source.data["x"], dtype=float)
+        y = np.asarray(renderer.data_source.data["y"], dtype=float)
+        if x.shape != grid.shape or not np.array_equal(x, grid):
+            y = np.interp(grid, x, y, left=np.nan, right=np.nan)
+        values.append(y)
+        columns["v%d" % i] = _texts(y, fmt)
+        fields.append("@v%d" % i)
+        labels.append(renderer.name)
+
+    stacked = np.vstack(values)
+    blank = np.all(np.isnan(stacked), axis=0)
+    with np.errstate(invalid="ignore"):
+        top = np.nanmax(np.where(np.isnan(stacked), -np.inf, stacked), axis=0)
+    columns["top"] = np.where(blank, 0.0, top)   # anchors the box; never drawn
+
+    source = ColumnDataSource(columns)
+    probe = p.line("x", "top", source=source, line_alpha=0.0, level="underlay")
+    header = [(x_label, "@x{0.0}")]
+    hover = HoverTool(renderers=[probe], mode="vline", attachment="horizontal",
+                      tooltips=header + list(zip(labels, fields)))
+    p.add_tools(hover)
+
+    # a hidden curve should not still be quoted in the box; the legend's own
+    # click policy only flips ``visible``, so the rows are rebuilt from that
+    sync = CustomJS(args=dict(hover=hover, curves=curves, labels=labels,
+                              fields=fields, header=header),
+                    code="""
+        const rows = [...header];
+        for (let i = 0; i < curves.length; i++) {
+            if (curves[i].visible) rows.push([labels[i], fields[i]]);
+        }
+        hover.tooltips = rows;
+    """)
+    for renderer in curves:
+        renderer.js_on_change("visible", sync)
 
 
 def shared_legend(p: figure, entries: Dict[str, Sequence[GlyphRenderer]],
@@ -118,10 +204,10 @@ def systems_table(scanners: Sequence[Any], task: Optional[Any] = None) -> pd.Dat
 
     Give a ``task`` and two more columns appear: ``r``, the resolution factor for
     a SLoG of that size in an object of that diameter, and ``eps * r``, the
-    product of the two things a system brings to it.  Both are independent of the scan
-    length and of the bed protocol, so they rank systems before any acquisition
-    is chosen -- the axial profile then decides how much of that survives over a
-    long range.
+    product of the two things a system brings to it.  Both are independent of
+    the scan length and of the bed protocol, so they rank systems before any
+    acquisition is chosen -- the axial profile then decides how much of that
+    survives over a long range.
     """
     rows = []
     for scanner in scanners:

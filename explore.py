@@ -166,10 +166,13 @@ with_eps = panel("eps * eta(z)", x_range=geometry.x_range)
 with_r = panel("r * eps * eta(z)", "axial position z (cm)",
                x_range=geometry.x_range)
 
+# one grid for all of them: eta is zero beyond a detector's ends, and a shared
+# grid is what lets the hover quote every system in a single box
+reach = 0.55 * max(scanner.L_pet for scanner in scanners)
+zz = np.linspace(-reach, reach, 601)
+
 curves = {}                      # label -> its line in each of the three panels
 for scanner, colour in zip(scanners, cycle(COLOURS)):
-    reach = 0.55 * scanner.L_pet
-    zz = np.linspace(-reach, reach, 401)
     y = single_bed_eta_profiles[scanner].samples(zz)
     style = dict(color=colour, line_width=2, name=scanner.label)
     curves[scanner.label] = [
