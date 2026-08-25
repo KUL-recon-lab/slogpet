@@ -35,7 +35,7 @@
       "note": "Ultra-high-sensitivity mode: all ring differences accepted."
     },
     {
-      "name": "Biograph Vision Quadra", "vendor": "Siemens",
+      "name": "Biograph Vision Quadra (MRD 85)", "vendor": "Siemens",
       "L_pet": 1060.0, "D_pet": 820.0, "L_mrd": 282.0,
       "crystal": "LSO", "crystal_size": [3.2, 3.2, 20.0],
       "ctr": 228.0, "energy_resolution": 10.1, "energy_window": [435, 585],
