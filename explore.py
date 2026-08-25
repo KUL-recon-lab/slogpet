@@ -11,9 +11,6 @@
 # **To use it:** edit the parameters in the second cell, then run everything.
 # Nothing is sent anywhere; the calculation runs in your own browser.
 #
-# The same file is a plain Python script -- `python explore.py` at a terminal
-# does exactly what the notebook does.
-#
 # ## Setting up
 #
 # The table below is every system the package knows about, with the parameters
@@ -75,7 +72,8 @@ system_names = (
 )
 
 # list of custom scanners to compare; must be instances of slogpet.types.Scanner
-custom_scanners = [sp.Scanner(name="my scanner", L_pet=350.0, D_pet=760.0, F_y=4.0, F_z=4.0, ctr=100.0, epsilon=0.2)]
+custom_scanners = [sp.Scanner(name="my-scanner-1", L_pet=300.0, D_pet=760.0, F_y=4.0, F_z=4.0, ctr=120.0, epsilon=0.2),
+                   sp.Scanner(name="my-scanner-1", L_pet=250.0, D_pet=760.0, F_y=3.8, F_z=3.8, ctr=100.0, S_nema=15.0)]
 #custom_scanners = None
 
 # defined the SLoG task to be used for the comparison
@@ -87,8 +85,8 @@ scan_lengths_mm = np.linspace(50.0, 2000.0, 41)
 # max ripple amplitude of the sensitivity axial profile (max_sens(z) / min_sens(z)) allowed in the optimal bed protocol; None means no limit
 ripple_limit = None   
 
-## %%
-# ------------------------------ setup --------------------------------------
+# %%
+# setup selected predified systems and any custom scanners for comparison
 
 scanners = []
 for name in system_names:
