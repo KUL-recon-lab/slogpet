@@ -1,23 +1,28 @@
-"""Bokeh helpers for explore.py, kept out of the way.
+"""Presentation helpers for explore.py, kept out of the way.
 
-Nothing here is about PET: it is the plumbing that makes the figures in
-``explore.py`` interactive and consistent, moved out so that the notebook a
-reader sees is about the physics and the choices, not about plot construction.
+Nothing here is about PET: it is the plumbing that makes the table and the
+figures in ``explore.py`` readable and consistent, moved out so that the
+notebook a reader sees is about the physics and the choices, not about how a
+plot is put together.
 
 The one decision worth knowing is where a figure goes.  Under a Jupyter kernel
 -- JupyterLite included -- it is drawn beneath the cell; at a terminal it is
 written as an HTML file and opened in a browser tab.  Importing this module
 settles that once and, in a notebook, loads BokehJS.
 """
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
+import pandas as pd
 from bokeh.io import output_file, output_notebook, show
 from bokeh.layouts import gridplot
 from bokeh.models import HoverTool, Range1d
 from bokeh.plotting import figure
 
-__all__ = ["COLOURS", "IN_NOTEBOOK", "in_notebook", "panel", "draw", "series"]
+from slogpet.resolution import C_OVER_2      # mm per ps, for CTR <-> F_t
+
+__all__ = ["COLOURS", "IN_NOTEBOOK", "in_notebook", "panel", "draw", "legend_of",
+           "series", "systems_table", "show_table"]
 
 # Colour-vision checked; cycled if you compare more systems than there are.
 COLOURS = ("#2a78d6", "#eda100", "#d55181", "#008300", "#7a5195", "#4a4a48")
@@ -91,3 +96,50 @@ def series(protocols: Sequence[Any], attribute: str) -> np.ndarray:
     """
     return np.array([getattr(p, attribute) if p is not None else np.nan
                      for p in protocols], dtype=float)
+
+
+# ------------------------------------------------------------------ tables
+def systems_table(scanners: Sequence[Any]) -> pd.DataFrame:
+    """The parameters that decide how a system performs, one row each.
+
+    Every column is a number the model actually uses, except the crystal, which
+    is there to make the families recognisable.  ``eps`` is the detector-pair
+    efficiency: as published where a system quotes one, and otherwise worked out
+    from its NEMA sensitivity and its geometry.
+    """
+    rows = []
+    for scanner in scanners:
+        rows.append({
+            "system": scanner.name,
+            "L_PET (cm)": round(scanner.L_pet / 10, 1),
+            "D_PET (cm)": round(scanner.D_pet / 10, 1),
+            "MRD (cm)": (np.nan if not np.isfinite(scanner.L_mrd)
+                         else round(scanner.L_mrd / 10, 1)),
+            "crystal": scanner.crystal or "",
+            "F_y (mm)": scanner.F_y,
+            "F_z (mm)": scanner.F_z,
+            "CTR (ps)": (np.nan if scanner.F_t is None
+                         else round(scanner.F_t / C_OVER_2)),
+            "S_NEMA (cps/kBq)": (np.nan if scanner.S_nema is None
+                                 else round(scanner.S_nema, 1)),
+            "eps": round(scanner.efficiency(), 3),
+        })
+    return pd.DataFrame(rows).set_index("system")
+
+
+def show_table(frame: pd.DataFrame) -> None:
+    """Display a table: as HTML in a notebook, as aligned text from a script.
+
+    A blank cell means the system has no such number -- no time of flight, no
+    ring-difference limit -- rather than a missing measurement.
+    """
+    if not IN_NOTEBOOK:
+        # the same "%g" the notebook gets, so the two agree: 210 not 210.0
+        print(frame.to_string(na_rep="-", float_format=lambda v: "%g" % v))
+        return
+    from IPython.display import display
+    try:
+        numbers = frame.select_dtypes("number").columns
+        display(frame.style.format("{:g}", na_rep="-", subset=numbers))
+    except ImportError:                    # Styler needs jinja2; the frame alone
+        display(frame)                     # is still perfectly readable

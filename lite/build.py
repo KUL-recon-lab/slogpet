@@ -50,9 +50,11 @@ NOTEBOOK = os.path.join(FILES, "explore.ipynb")
 PORT = 8009
 
 # Loaded when the kernel starts, so that nothing depends on Pyodide guessing.
-# scipy is here because slogpet imports it internally, where no cell can see it;
-# bokeh brings pandas and jinja2 with it, which is why the list looks short.
-PRELOAD = ["numpy", "scipy", "bokeh"]
+# scipy is here because slogpet imports it internally, where no cell can see it.
+# pandas is named although Pyodide's bokeh happens to depend on it: bokeh itself
+# asks for narwhals, not pandas, so inheriting it would be luck rather than a
+# decision -- and the table in explore.py needs it outright.
+PRELOAD = ["numpy", "scipy", "bokeh", "pandas"]
 KERNEL = "@jupyterlite/pyodide-kernel-extension:kernel"
 
 

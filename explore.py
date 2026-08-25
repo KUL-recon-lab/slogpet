@@ -16,8 +16,10 @@
 #
 # ## Setting up
 #
-# The list printed below is every system the package knows about; the names are
-# what the next cell expects.
+# The table below is every system the package knows about, with the parameters
+# the model actually uses.  The names in the first column are what the next cell
+# expects.  A blank cell means the system has no such number -- no time of
+# flight, no ring-difference limit -- rather than a measurement nobody made.
 
 # %%
 from itertools import cycle
@@ -31,16 +33,12 @@ from slogpet.data import load_systems
 # by hovering.  plots.py next to this file holds that plumbing -- where a figure
 # goes, how a panel is set up, the colours -- so that what follows is about the
 # physics rather than about plot construction.
-from plots import COLOURS, draw, legend_of, panel, series
+from plots import (COLOURS, draw, legend_of, panel, series, show_table,
+                   systems_table)
 
 all_predified_systems = load_systems()
 
-print("predefined systems")
-print("------------------")
-for scanner in all_predified_systems:
-    print(scanner.label)
-
-print()
+show_table(systems_table(all_predified_systems))
 
 
 # %% [markdown]
