@@ -23,65 +23,15 @@
 from itertools import cycle
 
 import numpy as np
-from bokeh.io import output_file, output_notebook, show
-from bokeh.layouts import gridplot
-from bokeh.models import HoverTool
-from bokeh.plotting import figure
 
 import slogpet as sp
 from slogpet.data import load_systems
 
-# The figures are drawn by bokeh, so they can be zoomed, panned and read off by
-# hovering.  Where they go depends on whether there is a notebook to draw into:
-# under a kernel they appear beneath the cell, and at a terminal they are written
-# as HTML and opened in a browser tab.
-
-
-def in_notebook() -> bool:
-    """True when there is a kernel to draw into.
-
-    Deliberately not a test for any particular kernel -- JupyterLite's Pyodide
-    kernel does not import ipykernel, and others differ again.  What is asked
-    instead is whether IPython is running at all, and whether it is the terminal
-    shell, which is the one shell that cannot show a figure inline.
-    """
-    try:
-        from IPython import get_ipython
-    except ImportError:
-        return False                       # a plain python run
-    shell = get_ipython()
-    return shell is not None and type(shell).__name__ != "TerminalInteractiveShell"
-
-
-IN_NOTEBOOK = in_notebook()
-if IN_NOTEBOOK:
-    output_notebook(hide_banner=True)
-
-# Colour-vision checked; cycled if you compare more systems than there are.
-COLOURS = ("#2a78d6", "#eda100", "#d55181", "#008300", "#7a5195", "#4a4a48")
-
-
-def panel(y_label, x_label=None, x_range=None, y_axis_type="linear"):
-    """One plot, sized and tooled the same as all the others."""
-    # x_range is passed only when there is one to share: bokeh rejects None
-    shared = {"x_range": x_range} if x_range is not None else {}
-    p = figure(width=780, height=270, x_axis_label=x_label, y_axis_label=y_label,
-               y_axis_type=y_axis_type, tools="pan,box_zoom,wheel_zoom,reset,save",
-               **shared)
-    p.add_tools(HoverTool(tooltips=[("", "$name"), ("x", "$x{0.0}"),
-                                    ("y", "$y{0.000 a}")], mode="vline"))
-    p.grid.grid_line_alpha = 0.35
-    p.toolbar.logo = None
-    return p
-
-
-def draw(panels, filename):
-    """Show a stack of panels: under the cell in a notebook, in a browser tab
-    from a script.  One toolbar drives all of them, and they share their x axis,
-    so zooming or panning any panel moves the others with it."""
-    if not IN_NOTEBOOK:
-        output_file(filename, title="SLoG PET explorer")
-    show(gridplot([[p] for p in panels], merge_tools=True, toolbar_location="right"))
+# The figures are drawn with bokeh, so they can be zoomed, panned and read off
+# by hovering.  plots.py next to this file holds that plumbing -- where a figure
+# goes, how a panel is set up, the colours -- so that what follows is about the
+# physics rather than about plot construction.
+from plots import COLOURS, draw, legend_of, panel, series
 
 all_predified_systems = load_systems()
 
@@ -203,9 +153,7 @@ for scanner, colour in zip(scanners, cycle(COLOURS)):
 
 for p in (geometry, with_eps, with_r):
     p.y_range.start = 0.0
-geometry.legend.location = "top_left"
-geometry.legend.click_policy = "hide"          # click a name to hide its curve
-geometry.legend.background_fill_alpha = 0.85
+legend_of(geometry)
 draw([geometry, with_eps, with_r], "explore-single-bed.html")
 
 
@@ -249,24 +197,15 @@ overlap = panel("optimal overlap (%)", x_range=beds.x_range)
 worst = panel("min \u03b7\u2099(z) over the range", "scan length S (cm)",
               x_range=beds.x_range)
 
-
-def per_scan_length(scanner, attribute):
-    """One protocol attribute against scan length; NaN where the ripple limit
-    could not be met, which leaves a gap in the curve rather than a wrong point."""
-    return np.array([getattr(p, attribute) if p is not None else np.nan
-                     for p in protocols[scanner.name]], dtype=float)
-
-
 for scanner, colour in zip(scanners, cycle(COLOURS)):
     style = dict(color=colour, line_width=2, name=scanner.label)
-    beds.step(scan_lengths_mm / 10, per_scan_length(scanner, "n_beds"),
+    protocol = protocols[scanner.name]
+    beds.step(scan_lengths_mm / 10, series(protocol, "n_beds"),
               mode="after", legend_label=scanner.label, **style)
-    overlap.line(scan_lengths_mm / 10, per_scan_length(scanner, "overlap"), **style)
-    worst.line(scan_lengths_mm / 10, per_scan_length(scanner, "min_eta"), **style)
+    overlap.line(scan_lengths_mm / 10, series(protocol, "overlap"), **style)
+    worst.line(scan_lengths_mm / 10, series(protocol, "min_eta"), **style)
 
-beds.legend.location = "top_left"
-beds.legend.click_policy = "hide"
-beds.legend.background_fill_alpha = 0.85
+legend_of(beds)
 draw([beds, overlap, worst], "explore-protocols.html")
 
 
@@ -313,9 +252,7 @@ for scanner, colour in zip(scanners, cycle(COLOURS)):
     logarithmic.line(scan_lengths_mm / 10, snr2_min[scanner.name], **style)
 
 linear.y_range.start = 0.0
-linear.legend.location = "top_right"
-linear.legend.click_policy = "hide"
-linear.legend.background_fill_alpha = 0.85
+legend_of(linear, "top_right")
 draw([linear, logarithmic], "explore-detectability.html")
 
 

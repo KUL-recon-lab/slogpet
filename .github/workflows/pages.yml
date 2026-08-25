@@ -18,6 +18,7 @@ on:
     branches: [main]
     paths:
       - "explore.py"
+      - "plots.py"
       - "lite/**"
       - "slogpet/**"
       - "pixi.toml"

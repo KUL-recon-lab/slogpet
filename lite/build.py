@@ -12,7 +12,7 @@ Three steps, no wheel and nothing installed at run time:
     terminal, and cannot drift from the notebook because the notebook is derived
     from it every build.
 
-2.  ``slogpet/`` is copied in beside it.  JupyterLite mounts everything under
+2.  ``plots.py`` and ``slogpet/`` are copied in beside it.  JupyterLite mounts everything under
     ``lite/files/`` as the reader's drive, the notebook's working directory is
     that drive, and IPython puts the working directory on ``sys.path`` -- so
     ``import slogpet`` finds the sources sitting next to the notebook.  numpy,
@@ -38,6 +38,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SCRIPT = os.path.join(ROOT, "explore.py")
+HELPERS = os.path.join(ROOT, "plots.py")     # imported by the notebook
 PACKAGE = os.path.join(ROOT, "slogpet")
 
 # The convention: everything under {lite-dir}/files/ is copied to {site}/files/
@@ -69,6 +70,7 @@ def assemble() -> None:
 
     subprocess.run([_tool("jupytext"), "--to", "ipynb", SCRIPT, "-o", NOTEBOOK],
                    check=True)
+    shutil.copy(HELPERS, FILES)
     shutil.copytree(PACKAGE, os.path.join(FILES, "slogpet"),
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     print("assembled %s" % os.path.relpath(FILES, ROOT))
