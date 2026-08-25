@@ -6,6 +6,7 @@
 #   default   numpy + scipy + pytest    the model and its test suite  (~2 s)
 #   paper     + matplotlib              make_all.py, then latexmk
 #   explore   + ipython and a window    the same figures, on screen
+#   lite      + jupyterlite and jupytext  explore.py, runnable in a browser
 #   web       python and nothing else   web/build.py
 #
 # Two of those are not what one would guess, and both were checked rather than
@@ -98,6 +99,22 @@ ipython = ">=8"
 ipython = { cmd = "ipython --matplotlib", description = "a prompt with the figures importable: from paper.fig_beds import make; make(None)" }
 show = { cmd = "python make_all.py --show", description = "draw every figure on screen, writing nothing" }
 
+# ------------------------------------------- explore.py, in a reader's browser
+#
+# JupyterLite turns explore.py into a notebook and serves it as a static site:
+# the reader runs the real package in their own browser, with nothing installed
+# and nothing sent anywhere.  See lite/build.py for how the pieces fit.
+[feature.lite.dependencies]
+jupyterlite-core = ">=0.6"
+jupyterlite-pyodide-kernel = "*"
+jupyter_server = "*"          # jupyter lite build needs it to index the contents;
+                              # conda-forge spells it with an underscore
+jupytext = ">=1.16"           # explore.py -> explore.ipynb
+
+[feature.lite.tasks]
+site = { cmd = "python lite/build.py", description = "build the JupyterLite site into lite/site" }
+serve = { cmd = "python lite/build.py --serve", description = "build it and serve it at localhost:8009" }
+
 # ------------------------------------------------------------- the web page
 [feature.web.dependencies]
 python = ">=3.9"          # and nothing else: build.py imports json, os, sys
@@ -115,5 +132,6 @@ playwright = "*"
 default = ["test"]
 paper = ["paper"]
 explore = ["paper", "explore"]
+lite = ["lite"]
 web = { features = ["web"], no-default-feature = true }
 webcheck = ["web", "webcheck"]

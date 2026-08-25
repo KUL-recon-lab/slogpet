@@ -1,20 +1,24 @@
-# Build the browser frontend and publish it to GitHub Pages.
+# Build the JupyterLite site and publish it to GitHub Pages.
 #
-# The page is one self-contained HTML file with the slogpet sources embedded in
-# it, so there is nothing to compile and nothing to serve dynamically: the build
-# is `python web/build.py` and the deploy is a static upload.  The `web`
-# environment deliberately contains Python and nothing else -- no numpy, no
-# scipy, no pyodide.  Pyodide is fetched by the visitor's browser from a CDN.
+# The site is explore.py turned into a notebook by jupytext, plus a copy of the
+# slogpet sources next to it, served by a static JupyterLite build.  Nothing is
+# installed at run time: the reader's browser fetches Pyodide from a CDN, which
+# loads numpy, scipy and matplotlib on import, and slogpet is imported from the
+# sources sitting beside the notebook on the reader's drive.
+#
+# Replaces the earlier deployment of web/index.html, which is still in the
+# repository but no longer published.
 #
 # Enable this once under Settings -> Pages -> Source: GitHub Actions.
 
-name: web
+name: pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "web/**"
+      - "explore.py"
+      - "lite/**"
       - "slogpet/**"
       - "pixi.toml"
       - "pixi.lock"
@@ -40,21 +44,24 @@ jobs:
       # NB: pin bumped by hand; check for a newer tag when you touch this file.
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          environments: web
+          environments: lite
           locked: true
           cache: true
 
-      - name: Build index.html
-        run: pixi run -e web web
+      - name: Build the JupyterLite site
+        run: pixi run -e lite site
 
-      - name: Collect the site
-        run: |
-          mkdir -p _site
-          cp web/index.html _site/index.html
+      # The notebook is generated, so a broken explore.py would otherwise only
+      # show up in someone's browser.  Running it here is the cheap check.
+      - name: The script itself must still run
+        run: pixi run -e paper python explore.py
+        env:
+          MPLBACKEND: Agg
+          PYTHONPATH: ${{ github.workspace }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: lite/site
 
   deploy:
     needs: build
@@ -65,22 +72,3 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
-
-  ## web/index.html is generated but tracked, so that Pages has something to
-  ## serve.  This is the check that the committed copy is not stale.  It is a
-  ## separate job so that a stale copy does not block the deployment: the page
-  ## that goes live is the one built above, not the committed one.
-  #up-to-date:
-  #  runs-on: ubuntu-latest
-  #  steps:
-  #    - uses: actions/checkout@v4
-  #    - uses: prefix-dev/setup-pixi@v0.8.1
-  #      with:
-  #        environments: web
-  #        locked: true
-  #        cache: true
-  #    - name: The committed index.html must match its sources
-  #      run: |
-  #        pixi run -e web web
-  #        git diff --exit-code --stat -- web/index.html \
-  #          || { echo "::error::web/index.html is out of date. Run 'pixi run -e web web' and commit."; exit 1; }
