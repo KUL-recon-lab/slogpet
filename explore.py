@@ -16,9 +16,9 @@
 # three out for whichever systems you choose, using the same `slogpet` package
 # as the paper -- there is no physics in this file, only choices and plots.
 #
-# Because the task discriminates on size, it is *unusually* sensitive to
-# detector resolution.  What follows ranks systems on that task, and is not a
-# general statement about image quality.
+# Because the task discriminates on size, it is sensitive to
+# detector and time-of-flight resolution.
+# What follows ranks systems on that task, and is not a general statement about image quality.
 #
 # **To use it:** edit the parameters in the second cell, then run everything.
 # Nothing is sent anywhere; the calculation runs in your own browser.
