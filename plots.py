@@ -16,13 +16,13 @@ import numpy as np
 import pandas as pd
 from bokeh.io import output_file, output_notebook, show
 from bokeh.layouts import gridplot
-from bokeh.models import HoverTool, Range1d
+from bokeh.models import GlyphRenderer, HoverTool, Legend, LegendItem, Range1d
 from bokeh.plotting import figure
 
 from slogpet.resolution import C_OVER_2      # mm per ps, for CTR <-> F_t
 
-__all__ = ["COLOURS", "IN_NOTEBOOK", "in_notebook", "panel", "draw", "legend_of",
-           "series", "systems_table", "show_table"]
+__all__ = ["COLOURS", "IN_NOTEBOOK", "in_notebook", "panel", "draw",
+           "shared_legend", "series", "systems_table", "show_table"]
 
 # Colour-vision checked; cycled if you compare more systems than there are.
 COLOURS = ("#2a78d6", "#eda100", "#d55181", "#008300", "#7a5195", "#4a4a48")
@@ -80,12 +80,21 @@ def draw(panels: Sequence[figure], filename: str) -> None:
     show(gridplot([[p] for p in panels], merge_tools=True, toolbar_location="right"))
 
 
-def legend_of(p: figure, location: str = "top_left") -> None:
-    """Make a panel's legend readable and clickable: clicking an entry hides
-    that curve, which helps when several of them overlap."""
-    p.legend.location = location
-    p.legend.click_policy = "hide"
-    p.legend.background_fill_alpha = 0.85
+def shared_legend(p: figure, entries: Dict[str, Sequence[GlyphRenderer]],
+                  location: str = "top_left") -> None:
+    """Put one legend on panel *p* that drives every panel of the figure.
+
+    ``entries`` maps a label to the renderers that belong to it -- one per panel
+    -- and a legend entry hides or shows all of them at once.  Bokeh's own
+    ``legend_label=`` would build a legend per panel, each controlling only its
+    own curve, which is not what a stack of panels showing the same systems
+    wants: hiding a system should hide it everywhere.
+    """
+    legend = Legend(
+        items=[LegendItem(label=label, renderers=list(renderers))
+               for label, renderers in entries.items()],
+        location=location, click_policy="hide", background_fill_alpha=0.85)
+    p.add_layout(legend)
 
 
 def series(protocols: Sequence[Any], attribute: str) -> np.ndarray:

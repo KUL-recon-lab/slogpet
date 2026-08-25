@@ -1,19 +1,25 @@
 # %% [markdown]
 # # Comparing PET systems on a resolution-dependent task
 #
-# How well a PET system detects a small structure depends on three things that pull
+# How well a PET system detects a small lesion depends on three things that pull
 # against each other: how much of the emitted signal it catches, how sharply it
-# resolves the structure, and how evenly it covers the range being scanned.  This
-# notebook works all three out for whichever systems you choose for the detection of a SLoG.
+# resolves the lesion, and how evenly it covers the range being scanned.  This
+# notebook works all three out for whichever systems you choose, using the same
+# `slogpet` package as the paper -- there is no physics in this file, only
+# choices and plots.
 #
 # **To use it:** edit the parameters in the second cell, then run everything.
 # Nothing is sent anywhere; the calculation runs in your own browser.
+#
+# The same file is a plain Python script -- `python explore.py` at a terminal
+# does exactly what the notebook does.
 #
 # ## Setting up
 #
 # The table below is every system the package knows about, with the parameters
 # the model actually uses.  The names in the first column are what the next cell
-# expects.  
+# expects.  A blank cell means the system has no such number -- no time of
+# flight, no ring-difference limit -- rather than a measurement nobody made.
 
 # %%
 from itertools import cycle
@@ -27,7 +33,7 @@ from slogpet.data import load_systems
 # by hovering.  plots.py next to this file holds that plumbing -- where a figure
 # goes, how a panel is set up, the colours -- so that what follows is about the
 # physics rather than about plot construction.
-from plots import (COLOURS, draw, legend_of, panel, series, show_table,
+from plots import (COLOURS, draw, panel, series, shared_legend, show_table,
                    systems_table)
 
 all_predified_systems = load_systems()
@@ -44,7 +50,7 @@ show_table(systems_table(all_predified_systems))
 # * `custom_scanners` -- a system of your own.  Give either `epsilon`, the
 #   detector-pair efficiency, or `S_nema`, the NEMA NU 2 sensitivity in cps/kBq;
 #   the package derives one from the other and the geometry.
-# * `task` -- the SLoG (`F_o`, its size as FWHM in mm) and the body
+# * `task` -- the lesion (`F_o`, its size as a Gaussian FWHM in mm) and the body
 #   it sits in (`D_cyl`, a water cylinder).  A smaller lesion asks more of the
 #   resolution, so which system wins can change with `F_o`.
 # * `scan_lengths_mm` -- the axial range to cover, swept from a single organ to
@@ -54,6 +60,8 @@ show_table(systems_table(all_predified_systems))
 #   ripple, which is what the paper does; `1.2` insists the best point is at
 #   most 20 % above the worst, which costs sensitivity and usually more beds.
 #
+# Re-running this cell rebuilds `scanners`, so an edit here is picked up by
+# everything below.
 
 # %%
 # setup scanners to be compared
@@ -67,7 +75,7 @@ system_names = (
 )
 
 # list of custom scanners to compare; must be instances of slogpet.types.Scanner
-custom_scanners = [sp.Scanner(name="my scanner", L_pet=300.0, D_pet=760.0, F_y=4.0, F_z=4.0, ctr=100.0, epsilon=0.25)]
+custom_scanners = [sp.Scanner(name="my scanner", L_pet=700.0, D_pet=760.0, F_y=3.5, F_z=3.5, ctr=200.0, epsilon=0.2)]
 #custom_scanners = None
 
 # defined the SLoG task to be used for the comparison
@@ -79,8 +87,8 @@ scan_lengths_mm = np.linspace(50.0, 2000.0, 41)
 # max ripple amplitude of the sensitivity axial profile (max_sens(z) / min_sens(z)) allowed in the optimal bed protocol; None means no limit
 ripple_limit = None   
 
-# %%
-# setup all chosen / custom scanners
+## %%
+# ------------------------------ setup --------------------------------------
 
 scanners = []
 for name in system_names:
@@ -94,7 +102,7 @@ if custom_scanners is not None:
 
 
 # %% [markdown]
-# ## Single bed axial efficiency profile
+# ## One bed position: where the systems separate
 #
 # $\eta(z)$ is the fraction of a point source's emissions the detector sees at
 # axial position $z$, for a single bed position.  It peaks at the centre of the
@@ -108,9 +116,11 @@ if custom_scanners is not None:
 # 2. times $\varepsilon$, the detector-pair efficiency -- how many of the pairs
 #    that reach the crystals are actually recorded.
 # 3. times $r$, the resolution factor -- how much of the signal survives the
-#    system's spatial and timing resolution for a SLoG of this size.  For a
+#    system's spatial and timing resolution for a lesion of this size.  For a
 #    system without time of flight this depends on the body diameter too.
 #
+# The systems look alike in the first panel and fan out by a large factor in the
+# third: the profile is not where the difference lives.
 
 # %%
 # -------------
@@ -127,36 +137,45 @@ with_eps = panel("eps * eta(z)", x_range=geometry.x_range)
 with_r = panel("r * eps * eta(z)", "axial position z (cm)",
                x_range=geometry.x_range)
 
+curves = {}                      # label -> its line in each of the three panels
 for scanner, colour in zip(scanners, cycle(COLOURS)):
     reach = 0.55 * scanner.L_pet
     zz = np.linspace(-reach, reach, 401)
     y = single_bed_eta_profiles[scanner.name].samples(zz)
     style = dict(color=colour, line_width=2, name=scanner.label)
-    # solid angle coverage only
-    geometry.line(zz / 10, y, legend_label=scanner.label, **style)
-    # solid angle coverage times average detector-pair efficiency
-    with_eps.line(zz / 10, scanner.efficiency() * y, **style)
-    # solid angle coverage times average detector-pair efficiency times SLoG resolution factor
-    with_r.line(zz / 10, scanner.r(task) * scanner.efficiency() * y, **style)
+    curves[scanner.label] = [
+        # solid angle coverage only
+        geometry.line(zz / 10, y, **style),
+        # solid angle coverage times average detector-pair efficiency
+        with_eps.line(zz / 10, scanner.efficiency() * y, **style),
+        # solid angle coverage times average detector-pair efficiency times SLoG resolution factor
+        with_r.line(zz / 10, scanner.r(task) * scanner.efficiency() * y, **style),
+    ]
 
 for p in (geometry, with_eps, with_r):
     p.y_range.start = 0.0
-legend_of(geometry)
+shared_legend(geometry, curves)
 draw([geometry, with_eps, with_r], "explore-single-bed.html")
 
 
 # %% [markdown]
-# ## Optimising the multi-bed protocol
+# ## Covering a range: how many bed positions, and how far apart
 #
-# A scan range longer than the scanner is covered by moving the patient through
+# A scan range longer than the detector is covered by moving the patient through
 # in steps, each acquired for the same fraction of the total time.  The tiled
-# profile $\eta_N(z)$ ripples.
-# The package maximises $\min_z \eta_N(z)$ over the range, over both the
+# profile $\eta_N(z)$ ripples -- highest where neighbouring bed positions
+# overlap, lowest between them -- and what matters clinically is the worst point.
+# So the package maximises $\min_z \eta_N(z)$ over the range, over both the
 # number of beds and their spacing, and prefers a smaller bed count when it is
 # within $3\,\%$ of the best.
 #
 # The panels show what it chose: the bed count, the overlap between neighbouring
-# positions, and the sensitivity at the worst point.  
+# positions, and the sensitivity at the worst point.  The bed count is a step
+# function of the scan length, and the overlap is not monotone -- both are
+# consequences of the ripple, not of the search.
+#
+# With a `ripple_limit` set, a scan length where no arrangement can meet it has
+# no protocol at all; those points come back as `None` and leave a gap.
 
 # %%
 # calculate the optimal bed protocols for each scanner and scan length
@@ -179,22 +198,25 @@ overlap = panel("optimal overlap (%)", x_range=beds.x_range)
 worst = panel("min eta_N(z) over the range", "scan length S (cm)",
               x_range=beds.x_range)
 
+curves = {}
 for scanner, colour in zip(scanners, cycle(COLOURS)):
     style = dict(color=colour, line_width=2, name=scanner.label)
     protocol = protocols[scanner.name]
-    beds.step(scan_lengths_mm / 10, series(protocol, "n_beds"),
-              mode="after", legend_label=scanner.label, **style)
-    overlap.line(scan_lengths_mm / 10, series(protocol, "overlap"), **style)
-    worst.line(scan_lengths_mm / 10, series(protocol, "min_eta"), **style)
+    curves[scanner.label] = [
+        beds.step(scan_lengths_mm / 10, series(protocol, "n_beds"),
+                  mode="after", **style),
+        overlap.line(scan_lengths_mm / 10, series(protocol, "overlap"), **style),
+        worst.line(scan_lengths_mm / 10, series(protocol, "min_eta"), **style),
+    ]
 
-legend_of(beds)
+shared_legend(beds, curves)
 draw([beds, overlap, worst], "explore-protocols.html")
 
 
 # %% [markdown]
-# ## SNR for SLoG detection
+# ## Detectability
 #
-# The squared signal-to-noise ratio of the Hotelling
+# Putting it together.  The squared signal-to-noise ratio of the Hotelling
 # observer for this task factorises as
 #
 # $$\mathrm{SNR}^2(z) \;=\; T \;\times\;
@@ -204,7 +226,8 @@ draw([beds, overlap, worst], "explore-protocols.html")
 # where $T$ is the acquisition time and the fraction describes the patient --
 # both the same for every system compared.  What is plotted below is the
 # system's own part, $\varepsilon\,\eta_N\,r\,\sigma_\mathrm{o}^3$, at the
-# worst point of the scan range
+# worst point of the scan range -- the quantity that actually distinguishes one
+# scanner from another.
 #
 # The log panel is the useful one for comparing systems that differ by more than
 # a factor of a few.
@@ -229,14 +252,16 @@ linear = panel("minimum SNR^2")
 logarithmic = panel("minimum SNR^2", "scan length S (cm)",
                     x_range=linear.x_range, y_axis_type="log")
 
+curves = {}
 for scanner, colour in zip(scanners, cycle(COLOURS)):
     style = dict(color=colour, line_width=2, name=scanner.label)
-    linear.line(scan_lengths_mm / 10, snr2_min[scanner.name],
-                legend_label=scanner.label, **style)
-    logarithmic.line(scan_lengths_mm / 10, snr2_min[scanner.name], **style)
+    curves[scanner.label] = [
+        linear.line(scan_lengths_mm / 10, snr2_min[scanner.name], **style),
+        logarithmic.line(scan_lengths_mm / 10, snr2_min[scanner.name], **style),
+    ]
 
 linear.y_range.start = 0.0
-legend_of(linear, "top_right")
+shared_legend(linear, curves, "top_right")
 draw([linear, logarithmic], "explore-detectability.html")
 
 
