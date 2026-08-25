@@ -102,6 +102,27 @@ if custom_scanners is not None:
 
 
 # %% [markdown]
+# ## What the task alone decides
+#
+# The same table, with the systems you defined yourself added to it, and two
+# columns that only mean anything once the task is fixed:
+#
+# * $r$, the resolution factor -- how much of a lesion this size survives the
+#   system's spatial and timing resolution.  A system without time of flight
+#   also pays for the body diameter here.
+# * $\varepsilon \, r$, the product of the two things a system brings to the
+#   task, before any acquisition is chosen.
+#
+# Neither depends on the scan length or on the bed protocol, so this is the
+# ranking to beat: everything after this is about how much of it survives over
+# a long range.
+
+# %%
+show_table(systems_table(list(all_predified_systems) + list(custom_scanners or []),
+                         task))
+
+
+# %% [markdown]
 # ## One bed position: where the systems separate
 #
 # $\eta(z)$ is the fraction of a point source's emissions the detector sees at

@@ -108,13 +108,20 @@ def series(protocols: Sequence[Any], attribute: str) -> np.ndarray:
 
 
 # ------------------------------------------------------------------ tables
-def systems_table(scanners: Sequence[Any]) -> pd.DataFrame:
+def systems_table(scanners: Sequence[Any], task: Optional[Any] = None) -> pd.DataFrame:
     """The parameters that decide how a system performs, one row each.
 
     Every column is a number the model actually uses, except the crystal, which
     is there to make the families recognisable.  ``eps`` is the detector-pair
     efficiency: as published where a system quotes one, and otherwise worked out
     from its NEMA sensitivity and its geometry.
+
+    Give a ``task`` and two more columns appear: ``r``, the resolution factor for
+    that particular lesion in that particular body, and ``eps * r``, the product
+    of the two things a system brings to it.  Both are independent of the scan
+    length and of the bed protocol, so they rank systems before any acquisition
+    is chosen -- the axial profile then decides how much of that survives over a
+    long range.
     """
     rows = []
     for scanner in scanners:
@@ -133,6 +140,10 @@ def systems_table(scanners: Sequence[Any]) -> pd.DataFrame:
                                  else round(scanner.S_nema, 1)),
             "eps": round(scanner.efficiency(), 3),
         })
+        if task is not None:
+            r = scanner.r(task)
+            rows[-1]["r"] = round(r, 4)
+            rows[-1]["eps * r"] = round(scanner.efficiency() * r, 4)
     return pd.DataFrame(rows).set_index("system")
 
 
