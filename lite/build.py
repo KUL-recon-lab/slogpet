@@ -16,14 +16,20 @@ Three steps, no wheel and nothing installed at run time:
     ``lite/files/`` as the reader's drive, the notebook's working directory is
     that drive, and IPython puts the working directory on ``sys.path`` -- so
     ``import slogpet`` finds the sources sitting next to the notebook.  numpy,
-    scipy and matplotlib come from Pyodide itself, which loads them on import.
+    scipy and matplotlib come from Pyodide itself.
 
 3.  ``jupyter lite build``.  Pyodide is fetched from a CDN at page load rather
     than vendored, which keeps the site around 20 MB.
 
+The kernel is told which packages to load at startup, rather than left to work
+it out: Pyodide otherwise decides by parsing each cell for imports, which sees
+neither what ``slogpet`` imports internally nor anything at all in a cell that
+contains a magic.  See ``preload_packages`` below.
+
 ``lite/files/`` and ``lite/site/`` are both generated; only this script and the
 configuration next to it are tracked.
 """
+import json
 import os
 import shutil
 import subprocess
@@ -41,6 +47,11 @@ SITE = os.path.join(HERE, "site")
 NOTEBOOK = os.path.join(FILES, "explore.ipynb")
 
 PORT = 8009
+
+# Loaded when the kernel starts, so that nothing depends on Pyodide guessing.
+# scipy is here because slogpet imports it internally, where no cell can see it.
+PRELOAD = ["numpy", "scipy", "matplotlib", "matplotlib-inline"]
+KERNEL = "@jupyterlite/pyodide-kernel-extension:kernel"
 
 
 def _tool(name: str) -> str:
@@ -74,12 +85,34 @@ def build() -> int:
     result = subprocess.run(cmd)
     if result.returncode:
         return result.returncode
+    preload_packages()
 
     total = sum(os.path.getsize(os.path.join(d, f))
                 for d, _s, files in os.walk(SITE) for f in files)
     count = sum(len(files) for _d, _s, files in os.walk(SITE))
     print("wrote %s (%d files, %.0f MB)" % (SITE, count, total / 1024 / 1024))
     return 0
+
+
+def preload_packages() -> None:
+    """Name the startup packages in the built site's configuration.
+
+    Done to the finished file rather than through a ``jupyter-lite.json`` in the
+    lite directory, because the Pyodide kernel addon rewrites this very key
+    during the build: depending on the order the build steps happen to run in,
+    a setting placed there is sometimes kept and sometimes dropped.  Merging
+    afterwards always holds.
+    """
+    path = os.path.join(SITE, "jupyter-lite.json")
+    with open(path) as fh:
+        config = json.load(fh)
+    kernel = (config.setdefault("jupyter-config-data", {})
+                    .setdefault("litePluginSettings", {})
+                    .setdefault(KERNEL, {}))
+    kernel.setdefault("loadPyodideOptions", {})["packages"] = list(PRELOAD)
+    with open(path, "w") as fh:
+        json.dump(config, fh, indent=2)
+    print("kernel preloads: %s" % ", ".join(PRELOAD))
 
 
 def serve() -> int:

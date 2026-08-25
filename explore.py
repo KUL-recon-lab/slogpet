@@ -19,16 +19,21 @@
 # what the next cell expects.
 
 # %%
-# The next line is a notebook magic -- jupytext uncomments it on the way
-# into the notebook, and Python ignores it here.  It draws the inline
-# figures as SVG: sharp at any zoom, and saved as vectors.
-# %config InlineBackend.figure_formats = {"svg"}
 import numpy as np
-import scipy.integrate  # dummy import of scipy needed for Pyodide - leave it
 import matplotlib.pyplot as plt
 
 import slogpet as sp
 from slogpet.data import load_systems
+
+# Draw the figures in a notebook as SVG rather than PNG: sharp at any zoom, and
+# saved as vectors.  Plain Python rather than the %config magic, so that this
+# file stays runnable as a script; outside a notebook there is no inline
+# backend and this quietly does nothing.
+try:
+    from matplotlib_inline.backend_inline import set_matplotlib_formats
+    set_matplotlib_formats("svg")
+except Exception:
+    pass
 
 plt.rcParams.update({"figure.figsize": (7.0, 3.6), "axes.grid": True,
                      "grid.color": "0.88", "grid.linewidth": 0.5,
