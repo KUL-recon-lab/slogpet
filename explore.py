@@ -75,7 +75,7 @@ system_names = (
 )
 
 # list of custom scanners to compare; must be instances of slogpet.types.Scanner
-custom_scanners = [sp.Scanner(name="my scanner", L_pet=700.0, D_pet=760.0, F_y=3.5, F_z=3.5, ctr=200.0, epsilon=0.2)]
+custom_scanners = [sp.Scanner(name="my scanner", L_pet=350.0, D_pet=760.0, F_y=4.0, F_z=4.0, ctr=100.0, epsilon=0.2)]
 #custom_scanners = None
 
 # defined the SLoG task to be used for the comparison
