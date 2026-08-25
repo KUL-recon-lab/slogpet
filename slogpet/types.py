@@ -70,6 +70,11 @@ class Scanner:
     def has_tof(self) -> bool:
         return self.F_t is not None
 
+    @property
+    def label(self) -> str:
+        """A short label for plots."""
+        return f"{self.name} ({int(round(self.L_pet/10))} cm)"
+
     def S_ideal(self, L_s: float = L_S_NEMA) -> float:
         """Sensitivity of an ideal detector to the NEMA line source."""
         return S_ideal_closed(self.L_pet, self.D_pet, L_s, self.L_mrd)
@@ -90,6 +95,7 @@ class Scanner:
         """Resolution factor for this task; the non-TOF form if the system has no
         time of flight, in which case it depends on the object diameter."""
         return r_of(self.F_t, self.F_y, self.F_z, task.F_o, task.D_cyl)
+
 
 
 @dataclass(frozen=True)

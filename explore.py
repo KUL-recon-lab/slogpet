@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 import slogpet as sp
 from slogpet.data import load_systems
 
-def label(system):
-    return "%s (%.0f cm)" % (system.name, system.L_pet / 10)
-
 plt.rcParams.update({"figure.figsize": (7.0, 3.6), "axes.grid": True,
                      "grid.color": "0.88", "grid.linewidth": 0.5,
                      "figure.constrained_layout.use": True})
@@ -17,7 +14,7 @@ all_predified_systems = load_systems()
 print("predefined systems")
 print("------------------")
 for scanner in all_predified_systems:
-    print(label(scanner))
+    print(scanner.label)
 
 print()
 
@@ -40,8 +37,7 @@ SYSTEMS = (
 CUSTOM_SCANNERS = [sp.Scanner(name="my scanner", L_pet=1200.0, D_pet=760.0, F_y=3.5, F_z=3.5, ctr=200.0, S_nema=250.0)]
 
 # The detection task
-F_O_MM = 5.0                  # SLoG size, mm FWHM
-D_CYL_MM = 200.0              # water cylinder diameter, mm
+task = sp.Task(F_o = 5.0, D_cyl = 200.0, mu = 0.0096)   # mu is the linear attenuation coefficient of water at 511 keV, mm^-1
 
 # The acquisition
 scan_lengths_mm = np.linspace(50.0, 2000.0, 41)
@@ -62,13 +58,6 @@ if CUSTOM_SCANNERS is not None:
 
 
 # %%
-task = sp.Task(F_O_MM, D_CYL_MM)
-#first, last, count = scan_lengths_mm_CM
-print("%d configurations, %d scan lengths, SLoG %.1f mm in a %.0f cm cylinder"
-      % (len(scanners), len(scan_lengths_mm), F_O_MM, D_CYL_MM / 10))
-print()
-
-# %%
 # -------------
 # calculate and visualize the single bed axial efficiency profiles for each scanner
 
@@ -83,11 +72,11 @@ for scanner in scanners:
     zz = np.linspace(-reach, reach, 401)
     y = profiles[scanner.name].samples(zz)
     # solid angle coverage only
-    ax[0].plot(zz / 10, y, lw=1.8, label=label(scanner))
+    ax[0].plot(zz / 10, y, lw=1.8, label=scanner.label)
     # solid angle coverage times average detector-pair efficiency
-    ax[1].plot(zz / 10, scanner.efficiency() * y, lw=1.8, label=label(scanner))
+    ax[1].plot(zz / 10, scanner.efficiency() * y, lw=1.8, label=scanner.label)
     # solid angle coverage times average detector-pair efficiency times SLoG resolution factor
-    ax[2].plot(zz / 10, scanner.r(task) * scanner.efficiency() * y, lw=1.8, label=label(scanner))
+    ax[2].plot(zz / 10, scanner.r(task) * scanner.efficiency() * y, lw=1.8, label=scanner.label)
 
 for axx in ax:
     axx.set_ylim(bottom=0.0)
@@ -114,14 +103,13 @@ for scanner in scanners:
             pcol.append(None)
                 
     protocols[scanner.name] = pcol
-    print("done:", label(scanner))
 
 
 fig2, ax2 = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0), layout="constrained")
 for scanner in scanners:
-    ax2[0].plot(scan_lengths_mm / 10, [p.n_beds if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
-    ax2[1].plot(scan_lengths_mm / 10, [p.overlap if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
-    ax2[2].plot(scan_lengths_mm / 10, [p.min_eta if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
+    ax2[0].plot(scan_lengths_mm / 10, [p.n_beds if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
+    ax2[1].plot(scan_lengths_mm / 10, [p.overlap if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
+    ax2[2].plot(scan_lengths_mm / 10, [p.min_eta if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
 
 ax2[-1].set_xlabel("scan length $S$ (cm)")
 ax2[0].set_ylabel(r"optimal number of beds")
@@ -149,8 +137,8 @@ for scanner in scanners:
 
 fig3, ax3 = plt.subplots(2,1, figsize=(7.0, 6.0), layout="constrained", sharex=True)
 for scanner in scanners:
-    ax3[0].plot(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=label(scanner))
-    ax3[1].semilogy(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=label(scanner))
+    ax3[0].plot(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=scanner.label)
+    ax3[1].semilogy(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=scanner.label)
 
 ax3[-1].set_xlabel(r"scan length $S$ (cm)")
 ax3[0].set_ylabel(r"minimum SNR$^2$")
