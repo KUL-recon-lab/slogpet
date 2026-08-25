@@ -20,7 +20,6 @@
 # what the next cell expects.
 
 # %%
-import sys
 from itertools import cycle
 
 import numpy as np
@@ -34,9 +33,27 @@ from slogpet.data import load_systems
 
 # The figures are drawn by bokeh, so they can be zoomed, panned and read off by
 # hovering.  Where they go depends on whether there is a notebook to draw into:
-# in JupyterLite the kernel has imported ipykernel and they appear under the
-# cell, and at a terminal they are written as HTML and opened in a browser tab.
-IN_NOTEBOOK = "ipykernel" in sys.modules
+# under a kernel they appear beneath the cell, and at a terminal they are written
+# as HTML and opened in a browser tab.
+
+
+def in_notebook() -> bool:
+    """True when there is a kernel to draw into.
+
+    Deliberately not a test for any particular kernel -- JupyterLite's Pyodide
+    kernel does not import ipykernel, and others differ again.  What is asked
+    instead is whether IPython is running at all, and whether it is the terminal
+    shell, which is the one shell that cannot show a figure inline.
+    """
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return False                       # a plain python run
+    shell = get_ipython()
+    return shell is not None and type(shell).__name__ != "TerminalInteractiveShell"
+
+
+IN_NOTEBOOK = in_notebook()
 if IN_NOTEBOOK:
     output_notebook(hide_banner=True)
 
