@@ -40,7 +40,7 @@ def load_json(path: str) -> dict:
 def _scanner_from(d: dict, **override) -> Scanner:
     """One JSON record -> a Scanner.  ``null`` for ``L_mrd`` means unlimited."""
     kw = dict(
-        name=d["name"], L_pet=d["L_pet"], D_pet=d["D_pet"],
+        id=d.get("id"), name=d["name"], L_pet=d["L_pet"], D_pet=d["D_pet"],
         F_y=d.get("F_y"), F_z=d.get("F_z"),
         F_t=d.get("F_t"), ctr=d.get("ctr"),
         L_mrd=np.inf if d.get("L_mrd") is None else d["L_mrd"],

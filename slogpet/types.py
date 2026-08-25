@@ -36,7 +36,10 @@ class Scanner:
     derived from a published NEMA sensitivity via ``S_nema``.
 
     The remaining fields are descriptive: they are what the table in the paper
-    prints, and they carry the provenance of the numbers.
+    prints, and they carry the provenance of the numbers.  ``id`` is the number
+    the bundled catalogue gives a system, so that it can be picked out without
+    depending on its name -- two configurations of one scanner share a name
+    naturally, and a name may be reworded.
     """
     name: str
     L_pet: float                                  # axial length of the detector
@@ -55,6 +58,8 @@ class Scanner:
     reference: Union[int, str] = ""               # key into the reference list
     assumed: Sequence[str] = ()                   # fields not measured for this system
     note: str = ""
+    id: Optional[int] = None                      # 1..N for the bundled systems;
+                                                  # None for one built by hand
 
     def __post_init__(self):
         if self.F_t is None and self.ctr is not None:
@@ -95,7 +100,6 @@ class Scanner:
         """Resolution factor for this task; the non-TOF form if the system has no
         time of flight, in which case it depends on the object diameter."""
         return r_of(self.F_t, self.F_y, self.F_z, task.F_o, task.D_cyl)
-
 
 
 @dataclass(frozen=True)

@@ -127,6 +127,9 @@ def systems_table(scanners: Sequence[Any], task: Optional[Any] = None) -> pd.Dat
     for scanner in scanners:
         rows.append({
             "system": scanner.name,
+            # the number the catalogue gives it, and the way to pick it out;
+            # blank for a scanner built by hand, which has no catalogue entry
+            "id": np.nan if scanner.id is None else scanner.id,
             "L_PET (cm)": round(scanner.L_pet / 10, 1),
             "D_PET (cm)": round(scanner.D_pet / 10, 1),
             "MRD (cm)": (np.nan if not np.isfinite(scanner.L_mrd)
@@ -144,7 +147,8 @@ def systems_table(scanners: Sequence[Any], task: Optional[Any] = None) -> pd.Dat
             r = scanner.r(task)
             rows[-1]["r"] = round(r, 4)
             rows[-1]["eps * r"] = round(scanner.efficiency() * r, 4)
-    return pd.DataFrame(rows).set_index("system")
+    frame = pd.DataFrame(rows).set_index("system")
+    return frame[["id"] + [c for c in frame.columns if c != "id"]]
 
 
 def show_table(frame: pd.DataFrame) -> None:

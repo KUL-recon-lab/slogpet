@@ -14,7 +14,7 @@
 # ## Setting up
 #
 # The table below is every system the package knows about, with the parameters
-# the model actually uses.  The names in the first column are what the next cell
+# the model actually uses.  The `id` in the first column is what the next cell
 # expects.  A blank cell means the system has no such number -- no time of
 # flight, no ring-difference limit -- rather than a measurement nobody made.
 
@@ -43,7 +43,9 @@ show_table(systems_table(all_predified_systems))
 #
 # Everything you are likely to want to change is here.
 #
-# * `system_names` -- published systems, by name, from the list above.
+# * `system_ids` -- published systems, by the `id` in the table above.  An id
+#   stays with a system; names get reworded, and two configurations of one
+#   scanner share a name.
 # * `custom_scanners` -- a system of your own.  Give either `epsilon`, the
 #   detector-pair efficiency, or `S_nema`, the NEMA NU 2 sensitivity in cps/kBq;
 #   the package derives one from the other and the geometry.
@@ -63,17 +65,12 @@ show_table(systems_table(all_predified_systems))
 # %%
 # setup scanners to be compared
 
-# names of predefined systems to compare; must be in the catalogue
-system_names = (
-    "uMI Panorama",
-    "Biograph Vision Quadra",
-    "Omni 128",
-    "uMI Panorama GS",
-)
+# ids of predefined systems to compare; see the id column of the table above
+system_ids = (9, 3, 8, 10)
 
 # list of custom scanners to compare; must be instances of slogpet.types.Scanner
 custom_scanners = [sp.Scanner(name="my-scanner-1", L_pet=300.0, D_pet=760.0, F_y=4.0, F_z=4.0, ctr=120.0, epsilon=0.2),
-                   sp.Scanner(name="my-scanner-1", L_pet=250.0, D_pet=760.0, F_y=3.8, F_z=3.8, ctr=100.0, S_nema=15.0)]
+                   sp.Scanner(name="my-scanner-2", L_pet=250.0, D_pet=760.0, F_y=3.8, F_z=3.8, ctr=100.0, S_nema=15.0)]
 #custom_scanners = None
 
 # defined the SLoG task to be used for the comparison
@@ -88,12 +85,13 @@ ripple_limit = None
 # %%
 # setup selected predified systems and any custom scanners for comparison
 
+by_id = {s.id: s for s in all_predified_systems}
+
 scanners = []
-for name in system_names:
-    hits = [s for s in all_predified_systems if s.name == name]
-    if not hits:
-        raise SystemExit("no system called %r; run print_catalogue()" % name)
-    scanners.append(hits[0])                  # the first, where a name repeats
+for system_id in system_ids:
+    if system_id not in by_id:
+        raise SystemExit("no system with id %r; see the table above" % system_id)
+    scanners.append(by_id[system_id])
 
 if custom_scanners is not None:
     scanners.extend(custom_scanners)
@@ -147,7 +145,7 @@ show_table(systems_table(list(all_predified_systems) + list(custom_scanners or [
 
 single_bed_eta_profiles = {}
 for scanner in scanners:
-    single_bed_eta_profiles[scanner.name] = sp.axial_profile(scanner, task.D_cyl, task.mu)
+    single_bed_eta_profiles[scanner] = sp.axial_profile(scanner, task.D_cyl, task.mu)
 
 
 # visualize the single bed axial efficiency profiles for each scanner
@@ -160,7 +158,7 @@ curves = {}                      # label -> its line in each of the three panels
 for scanner, colour in zip(scanners, cycle(COLOURS)):
     reach = 0.55 * scanner.L_pet
     zz = np.linspace(-reach, reach, 401)
-    y = single_bed_eta_profiles[scanner.name].samples(zz)
+    y = single_bed_eta_profiles[scanner].samples(zz)
     style = dict(color=colour, line_width=2, name=scanner.label)
     curves[scanner.label] = [
         # solid angle coverage only
@@ -204,12 +202,12 @@ for scanner in scanners:
     pcol = []
     for S in scan_lengths_mm:
         try:
-            protocol = sp.optimal_protocol(single_bed_eta_profiles[scanner.name], float(S), max_peak_to_trough=ripple_limit)
+            protocol = sp.optimal_protocol(single_bed_eta_profiles[scanner], float(S), max_peak_to_trough=ripple_limit)
             pcol.append(protocol)
         except ValueError:                   # the limit cannot be met here
             pcol.append(None)
                 
-    protocols[scanner.name] = pcol
+    protocols[scanner] = pcol
 
 
 beds = panel("optimal number of beds")
@@ -220,7 +218,7 @@ worst = panel("min eta_N(z) over the range", "scan length S (cm)",
 curves = {}
 for scanner, colour in zip(scanners, cycle(COLOURS)):
     style = dict(color=colour, line_width=2, name=scanner.label)
-    protocol = protocols[scanner.name]
+    protocol = protocols[scanner]
     curves[scanner.label] = [
         beds.step(scan_lengths_mm / 10, series(protocol, "n_beds"),
                   mode="after", **style),
@@ -258,14 +256,14 @@ snr2_min = {}
 
 for scanner in scanners:
     values = []
-    for protocol in protocols[scanner.name]:
+    for protocol in protocols[scanner]:
         if protocol is None:
             values.append(np.nan)
         else:
             values.append(sp.snr2_value(scanner.efficiency(), protocol.min_eta,
                                         scanner.r(task), task.F_o))
 
-    snr2_min[scanner.name] = np.array(values)
+    snr2_min[scanner] = np.array(values)
 
 linear = panel("minimum SNR^2")
 logarithmic = panel("minimum SNR^2", "scan length S (cm)",
@@ -275,8 +273,8 @@ curves = {}
 for scanner, colour in zip(scanners, cycle(COLOURS)):
     style = dict(color=colour, line_width=2, name=scanner.label)
     curves[scanner.label] = [
-        linear.line(scan_lengths_mm / 10, snr2_min[scanner.name], **style),
-        logarithmic.line(scan_lengths_mm / 10, snr2_min[scanner.name], **style),
+        linear.line(scan_lengths_mm / 10, snr2_min[scanner], **style),
+        logarithmic.line(scan_lengths_mm / 10, snr2_min[scanner], **style),
     ]
 
 linear.y_range.start = 0.0

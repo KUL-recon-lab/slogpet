@@ -11,7 +11,7 @@
   ],
   "systems": [
     {
-      "name": "Biograph Vision 600", "vendor": "Siemens",
+      "id": 1, "name": "Biograph Vision 600", "vendor": "Siemens",
       "L_pet": 261.0, "D_pet": 820.0, "L_mrd": null,
       "crystal": "LSO", "crystal_size": [3.2, 3.2, 20.0],
       "ctr": 210.0, "energy_resolution": 9.0, "energy_window": [435, 585],
@@ -19,7 +19,7 @@
       "note": "Original electronics."
     },
     {
-      "name": "Biograph Vision.X", "vendor": "Siemens",
+      "id": 2, "name": "Biograph Vision.X", "vendor": "Siemens",
       "L_pet": 261.0, "D_pet": 820.0, "L_mrd": null,
       "crystal": "LSO", "crystal_size": [3.2, 3.2, 20.0],
       "ctr": 179.0, "energy_resolution": 9.0, "energy_window": [435, 585],
@@ -27,7 +27,7 @@
       "note": "Same detector as the Vision 600 after an electronics upgrade: only the CTR differs (ref. 9). The remaining entries are those of the original, for which alone a peer-reviewed evaluation exists."
     },
     {
-      "name": "Biograph Vision Quadra", "vendor": "Siemens",
+      "id": 3, "name": "Biograph Vision Quadra", "vendor": "Siemens",
       "L_pet": 1060.0, "D_pet": 820.0, "L_mrd": null,
       "crystal": "LSO", "crystal_size": [3.2, 3.2, 20.0],
       "ctr": 230.0, "energy_resolution": null, "energy_window": [435, 585],
@@ -35,7 +35,7 @@
       "note": "Ultra-high-sensitivity mode: all ring differences accepted."
     },
     {
-      "name": "Biograph Vision Quadra (MRD 85)", "vendor": "Siemens",
+      "id": 4, "name": "Biograph Vision Quadra (MRD 85)", "vendor": "Siemens",
       "L_pet": 1060.0, "D_pet": 820.0, "L_mrd": 282.0,
       "crystal": "LSO", "crystal_size": [3.2, 3.2, 20.0],
       "ctr": 228.0, "energy_resolution": 10.1, "energy_window": [435, 585],
@@ -43,21 +43,21 @@
       "note": "High-sensitivity mode, maximum ring difference 85."
     },
     {
-      "name": "Discovery MI (4 rings)", "vendor": "GE",
+      "id": 5, "name": "Discovery MI (4 rings)", "vendor": "GE",
       "L_pet": 200.0, "D_pet": 744.0, "L_mrd": null,
       "crystal": "LYSO", "crystal_size": [3.95, 5.3, 25.0],
       "ctr": 375.0, "energy_resolution": 9.4, "energy_window": [425, 650],
       "F_y": 4.1, "F_z": 4.5, "S_nema": 13.3, "reference": 3
     },
     {
-      "name": "Discovery MI (6 rings)", "vendor": "GE",
+      "id": 6, "name": "Discovery MI (6 rings)", "vendor": "GE",
       "L_pet": 300.0, "D_pet": 744.0, "L_mrd": null,
       "crystal": "LYSO", "crystal_size": [3.95, 5.3, 25.0],
       "ctr": 390.0, "energy_resolution": 9.6, "energy_window": [425, 650],
       "F_y": 4.2, "F_z": 5.0, "S_nema": 32.6, "reference": 4
     },
     {
-      "name": "Omni Legend 32", "vendor": "GE",
+      "id": 7, "name": "Omni Legend 32", "vendor": "GE",
       "L_pet": 320.0, "D_pet": 725.0, "L_mrd": null,
       "crystal": "BGO", "crystal_size": [4.1, 4.1, 30.0],
       "ctr": null, "energy_resolution": 9.8, "energy_window": [435, 580],
@@ -65,7 +65,7 @@
       "note": "The energy resolution is asserted in the discussion of ref. 5 rather than measured in it."
     },
     {
-      "name": "Omni 128", "vendor": "GE",
+      "id": 8, "name": "Omni 128", "vendor": "GE",
       "L_pet": 1280.0, "D_pet": 725.0, "L_mrd": null,
       "crystal": "BGO", "crystal_size": [4.1, 4.1, 30.0],
       "ctr": null, "energy_resolution": null, "energy_window": null,
@@ -74,7 +74,7 @@
       "note": "No published performance evaluation. The resolutions are those of the Omni Legend 32, which uses the same detector, so the r values in this row rest on that assumption."
     },
     {
-      "name": "uMI Panorama", "vendor": "United Imaging",
+      "id": 9, "name": "uMI Panorama", "vendor": "United Imaging",
       "L_pet": 351.0, "D_pet": 788.0, "L_mrd": null,
       "crystal": "LYSO", "crystal_size": [2.76, 2.76, 18.1],
       "ctr": 189.0, "energy_resolution": 9.6, "energy_window": [430, 650],
@@ -82,7 +82,7 @@
       "note": "D_pet is unpublished; 788 mm is inferred from the 62 degree maximum acceptance angle quoted for the GS, consistent with the 786 mm of the uEXPLORER."
     },
     {
-      "name": "uMI Panorama GS", "vendor": "United Imaging",
+      "id": 10, "name": "uMI Panorama GS", "vendor": "United Imaging",
       "L_pet": 1482.0, "D_pet": 788.0, "L_mrd": null,
       "crystal": "LYSO", "crystal_size": [2.76, 2.76, 18.1],
       "ctr": 189.0, "energy_resolution": 9.7, "energy_window": [430, 650],
