@@ -8,12 +8,21 @@
 # **To use it:** edit the parameters in the second cell, then run everything.
 # Nothing is sent anywhere; the calculation runs in your own browser.
 #
+# **To keep a figure:** right-click it and *Save image as...* -- the figures
+# are SVG, so they stay sharp at any size.  `fig.savefig("profiles.svg")` in
+# a cell writes the file next to the notebook instead, where the file browser
+# on the left can download it.
+#
 # ## Setting up
 #
 # The list printed below is every system the package knows about; the names are
 # what the next cell expects.
 
 # %%
+# The next line is a notebook magic -- jupytext uncomments it on the way
+# into the notebook, and Python ignores it here.  It draws the inline
+# figures as SVG: sharp at any zoom, and saved as vectors.
+# %config InlineBackend.figure_formats = {"svg"}
 import numpy as np
 import scipy.integrate  # dummy import of scipy needed for Pyodide - leave it
 import matplotlib.pyplot as plt
