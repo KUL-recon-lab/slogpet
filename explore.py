@@ -1,4 +1,28 @@
 # %%
+import numpy as np
+import matplotlib.pyplot as plt
+
+import slogpet as sp
+from slogpet.data import load_systems
+
+def label(system):
+    return "%s (%.0f cm)" % (system.name, system.L_pet / 10)
+
+plt.rcParams.update({"figure.figsize": (7.0, 3.6), "axes.grid": True,
+                     "grid.color": "0.88", "grid.linewidth": 0.5,
+                     "figure.constrained_layout.use": True})
+
+all_predified_systems = load_systems()
+
+print("predefined systems")
+print("------------------")
+for scanner in all_predified_systems:
+    print(label(scanner))
+
+print()
+
+
+# %%
 # ------------------------------ parameters ---------------------------------
 # Systems to compare, by name.  Everything the paper tabulates is available;
 # print_catalogue() below lists them.
@@ -12,62 +36,37 @@ SYSTEMS = (
 # A system of your own, or None.  Give either epsilon (the detector-pair
 # efficiency) or S_nema (the NEMA NU 2 sensitivity in cps/kBq, 70 cm line
 # source); the package works the other one out from the geometry.
-CUSTOM = None
-#CUSTOM = dict(name="my scanner", L_pet=1200.0, D_pet=760.0,
-#               F_y=3.5, F_z=3.5, ctr=200.0, S_nema=250.0)
+#CUSTOM_SCANNER = None
+CUSTOM_SCANNERS = [sp.Scanner(name="my scanner", L_pet=1200.0, D_pet=760.0, F_y=3.5, F_z=3.5, ctr=200.0, S_nema=250.0)]
 
 # The detection task
 F_O_MM = 5.0                  # SLoG size, mm FWHM
 D_CYL_MM = 200.0              # water cylinder diameter, mm
 
 # The acquisition
-SCAN_LENGTHS_CM = (5.0, 200.0, 61)     # first, last, how many
-PROFILE_AT_CM = 100.0                  # scan length for the axial panels
+scan_lengths_mm = np.linspace(50.0, 2000.0, 41)
 RIPPLE_LIMIT = None                    # e.g. 1.2 for at most 20 % ripple, or None
 
 # %%
 # ------------------------------ setup --------------------------------------
-import numpy as np
-import matplotlib.pyplot as plt
 
-import slogpet as sp
-from slogpet.data import load_systems
+scanners = []
+for name in SYSTEMS:
+    hits = [s for s in all_predified_systems if s.name == name]
+    if not hits:
+        raise SystemExit("no system called %r; run print_catalogue()" % name)
+    scanners.append(hits[0])                  # the first, where a name repeats
 
-plt.rcParams.update({"figure.figsize": (7.0, 3.6), "axes.grid": True,
-                     "grid.color": "0.88", "grid.linewidth": 0.5,
-                     "figure.constrained_layout.use": True})
-
-
-def print_catalogue():
-    """Every system name that SYSTEMS above will accept."""
-    for scanner in load_systems():
-        print("%-28s %5.0f cm" % (scanner.name, scanner.L_pet / 10))
+if CUSTOM_SCANNERS is not None:
+    scanners.extend(CUSTOM_SCANNERS)
 
 
-def chosen_scanners():
-    """SYSTEMS resolved against the catalogue, plus CUSTOM if there is one."""
-    catalogue = load_systems()
-    out = []
-    for name in SYSTEMS:
-        hits = [s for s in catalogue if s.name == name]
-        if not hits:
-            raise SystemExit("no system called %r; run print_catalogue()" % name)
-        out.append(hits[0])                  # the first, where a name repeats
-    if CUSTOM:
-        out.append(sp.Scanner(**CUSTOM))
-    return out
-
-
-def label(scanner):
-    return "%s (%.0f cm)" % (scanner.name, scanner.L_pet / 10)
-
-
-scanners = chosen_scanners()
+# %%
 task = sp.Task(F_O_MM, D_CYL_MM)
-first, last, count = SCAN_LENGTHS_CM
-scan_lengths = np.linspace(first * 10, last * 10, int(count))
+#first, last, count = scan_lengths_mm_CM
 print("%d configurations, %d scan lengths, SLoG %.1f mm in a %.0f cm cylinder"
-      % (len(scanners), len(scan_lengths), F_O_MM, D_CYL_MM / 10))
+      % (len(scanners), len(scan_lengths_mm), F_O_MM, D_CYL_MM / 10))
+print()
 
 # %%
 # -------------
@@ -107,7 +106,7 @@ protocols = {}
 
 for scanner in scanners:
     pcol = []
-    for S in scan_lengths:
+    for S in scan_lengths_mm:
         try:
             protocol = sp.optimal_protocol(profiles[scanner.name], float(S), max_peak_to_trough=RIPPLE_LIMIT)
             pcol.append(protocol)
@@ -120,9 +119,9 @@ for scanner in scanners:
 
 fig2, ax2 = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0), layout="constrained")
 for scanner in scanners:
-    ax2[0].plot(scan_lengths / 10, [p.n_beds if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
-    ax2[1].plot(scan_lengths / 10, [p.overlap if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
-    ax2[2].plot(scan_lengths / 10, [p.min_eta if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
+    ax2[0].plot(scan_lengths_mm / 10, [p.n_beds if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
+    ax2[1].plot(scan_lengths_mm / 10, [p.overlap if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
+    ax2[2].plot(scan_lengths_mm / 10, [p.min_eta if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=label(scanner))
 
 ax2[-1].set_xlabel("scan length $S$ (cm)")
 ax2[0].set_ylabel(r"optimal number of beds")
@@ -150,8 +149,8 @@ for scanner in scanners:
 
 fig3, ax3 = plt.subplots(2,1, figsize=(7.0, 6.0), layout="constrained", sharex=True)
 for scanner in scanners:
-    ax3[0].plot(scan_lengths / 10,  snr2_min[scanner.name], lw=1.8, label=label(scanner))
-    ax3[1].semilogy(scan_lengths / 10,  snr2_min[scanner.name], lw=1.8, label=label(scanner))
+    ax3[0].plot(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=label(scanner))
+    ax3[1].semilogy(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=label(scanner))
 
 ax3[-1].set_xlabel(r"scan length $S$ (cm)")
 ax3[0].set_ylabel(r"minimum SNR$^2$")
