@@ -106,18 +106,18 @@ if custom_scanners is not None:
 # %% [markdown]
 # ## One bed position: where the systems separate
 #
-# `eta(z)` is the fraction of a point source's emissions the detector sees at
-# axial position `z`, for a single bed position.  It peaks at the centre of the
+# $\eta(z)$ is the fraction of a point source's emissions the detector sees at
+# axial position $z$, for a single bed position.  It peaks at the centre of the
 # detector and falls to zero at its ends, and it is what every multi-bed
 # acquisition is built from.
 #
 # The three panels multiply it up, one factor at a time:
 #
-# 1. `eta(z)` alone -- geometry.  Note how little the *peaks* differ: a longer
+# 1. $\eta(z)$ alone -- geometry.  Note how little the *peaks* differ: a longer
 #    detector buys width, not height.
-# 2. times `epsilon`, the detector-pair efficiency -- how many of the pairs that
-#    reach the crystals are actually recorded.
-# 3. times `r`, the resolution factor -- how much of the signal survives the
+# 2. times $\varepsilon$, the detector-pair efficiency -- how many of the pairs
+#    that reach the crystals are actually recorded.
+# 3. times $r$, the resolution factor -- how much of the signal survives the
 #    system's spatial and timing resolution for a lesion of this size.  For a
 #    system without time of flight this depends on the body diameter too.
 #
@@ -134,9 +134,9 @@ for scanner in scanners:
 
 
 # visualize the single bed axial efficiency profiles for each scanner
-geometry = panel("\u03b7(z)")
-with_eps = panel("\u03b5 \u00b7 \u03b7(z)", x_range=geometry.x_range)
-with_r = panel("r \u00b7 \u03b5 \u00b7 \u03b7(z)", "axial position z (cm)",
+geometry = panel("eta(z)")
+with_eps = panel("eps * eta(z)", x_range=geometry.x_range)
+with_r = panel("r * eps * eta(z)", "axial position z (cm)",
                x_range=geometry.x_range)
 
 for scanner, colour in zip(scanners, cycle(COLOURS)):
@@ -162,11 +162,11 @@ draw([geometry, with_eps, with_r], "explore-single-bed.html")
 #
 # A scan range longer than the detector is covered by moving the patient through
 # in steps, each acquired for the same fraction of the total time.  The tiled
-# profile `eta_N(z)` ripples -- highest where neighbouring bed positions overlap,
-# lowest between them -- and what matters clinically is the worst point.  So the
-# package maximises `min eta_N` over the range, over both the number of beds and
-# their spacing, and prefers a smaller bed count when it is within 3 % of the
-# best.
+# profile $\eta_N(z)$ ripples -- highest where neighbouring bed positions
+# overlap, lowest between them -- and what matters clinically is the worst point.
+# So the package maximises $\min_z \eta_N(z)$ over the range, over both the
+# number of beds and their spacing, and prefers a smaller bed count when it is
+# within $3\,\%$ of the best.
 #
 # The panels show what it chose: the bed count, the overlap between neighbouring
 # positions, and the sensitivity at the worst point.  The bed count is a step
@@ -194,7 +194,7 @@ for scanner in scanners:
 
 beds = panel("optimal number of beds")
 overlap = panel("optimal overlap (%)", x_range=beds.x_range)
-worst = panel("min \u03b7\u2099(z) over the range", "scan length S (cm)",
+worst = panel("min eta_N(z) over the range", "scan length S (cm)",
               x_range=beds.x_range)
 
 for scanner, colour in zip(scanners, cycle(COLOURS)):
@@ -215,12 +215,15 @@ draw([beds, overlap, worst], "explore-protocols.html")
 # Putting it together.  The squared signal-to-noise ratio of the Hotelling
 # observer for this task factorises as
 #
-# `SNR^2(z) = T x [S^2 sigma_o^3 / (16 pi sqrt(pi) B)] x epsilon eta_N(z) x r`
+# $$\mathrm{SNR}^2(z) \;=\; T \;\times\;
+#   \frac{\dot{S}^2\,\sigma_\mathrm{o}^3}{16\pi\sqrt{\pi}\,\dot{B}}
+#   \;\times\; \varepsilon\,\eta_N(z) \;\times\; r$$
 #
-# where the first bracket describes the patient and the acquisition time and is
-# the same for every system compared.  What is plotted below is the system's own
-# part, `epsilon eta_N r sigma_o^3`, at the worst point of the scan range -- the
-# quantity that actually distinguishes one scanner from another.
+# where $T$ is the acquisition time and the fraction describes the patient --
+# both the same for every system compared.  What is plotted below is the
+# system's own part, $\varepsilon\,\eta_N\,r\,\sigma_\mathrm{o}^3$, at the
+# worst point of the scan range -- the quantity that actually distinguishes one
+# scanner from another.
 #
 # The log panel is the useful one for comparing systems that differ by more than
 # a factor of a few.
@@ -241,8 +244,8 @@ for scanner in scanners:
 
     snr2_min[scanner.name] = np.array(values)
 
-linear = panel("minimum SNR\u00b2")
-logarithmic = panel("minimum SNR\u00b2", "scan length S (cm)",
+linear = panel("minimum SNR^2")
+logarithmic = panel("minimum SNR^2", "scan length S (cm)",
                     x_range=linear.x_range, y_axis_type="log")
 
 for scanner, colour in zip(scanners, cycle(COLOURS)):
