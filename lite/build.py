@@ -16,7 +16,7 @@ Three steps, no wheel and nothing installed at run time:
     ``lite/files/`` as the reader's drive, the notebook's working directory is
     that drive, and IPython puts the working directory on ``sys.path`` -- so
     ``import slogpet`` finds the sources sitting next to the notebook.  numpy,
-    scipy and matplotlib come from Pyodide itself.
+    scipy and bokeh come from Pyodide itself.
 
 3.  ``jupyter lite build``.  Pyodide is fetched from a CDN at page load rather
     than vendored, which keeps the site around 20 MB.
@@ -49,8 +49,9 @@ NOTEBOOK = os.path.join(FILES, "explore.ipynb")
 PORT = 8009
 
 # Loaded when the kernel starts, so that nothing depends on Pyodide guessing.
-# scipy is here because slogpet imports it internally, where no cell can see it.
-PRELOAD = ["numpy", "scipy", "matplotlib", "matplotlib-inline"]
+# scipy is here because slogpet imports it internally, where no cell can see it;
+# bokeh brings pandas and jinja2 with it, which is why the list looks short.
+PRELOAD = ["numpy", "scipy", "bokeh"]
 KERNEL = "@jupyterlite/pyodide-kernel-extension:kernel"
 
 

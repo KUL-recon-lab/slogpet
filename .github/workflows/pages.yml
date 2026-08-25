@@ -54,10 +54,10 @@ jobs:
       # The notebook is generated, so a broken explore.py would otherwise only
       # show up in someone's browser.  Running it here is the cheap check.
       - name: The script itself must still run
-        run: pixi run -e paper python explore.py
+        run: pixi run -e lite python explore.py
         env:
-          MPLBACKEND: Agg
           PYTHONPATH: ${{ github.workspace }}
+          BOKEH_BROWSER: none        # write the HTML, do not try to open a tab
 
       - uses: actions/upload-pages-artifact@v3
         with:

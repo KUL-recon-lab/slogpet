@@ -3,15 +3,16 @@
 #
 # How well a PET system detects a small lesion depends on three things that pull
 # against each other: how much of the emitted signal it catches, how sharply it
-# resolves the lesion, and how evenly it covers the range being scanned.  
+# resolves the lesion, and how evenly it covers the range being scanned.  This
+# notebook works all three out for whichever systems you choose, using the same
+# `slogpet` package as the paper -- there is no physics in this file, only
+# choices and plots.
 #
 # **To use it:** edit the parameters in the second cell, then run everything.
 # Nothing is sent anywhere; the calculation runs in your own browser.
 #
-# **To keep a figure:** right-click it and *Save image as...* -- the figures
-# are SVG, so they stay sharp at any size.  `fig.savefig("profiles.svg")` in
-# a cell writes the file next to the notebook instead, where the file browser
-# on the left can download it.
+# The same file is a plain Python script -- `python explore.py` at a terminal
+# does exactly what the notebook does.
 #
 # ## Setting up
 #
@@ -19,25 +20,51 @@
 # what the next cell expects.
 
 # %%
+import sys
+from itertools import cycle
+
 import numpy as np
-import matplotlib.pyplot as plt
+from bokeh.io import output_file, output_notebook, show
+from bokeh.layouts import gridplot
+from bokeh.models import HoverTool
+from bokeh.plotting import figure
 
 import slogpet as sp
 from slogpet.data import load_systems
 
-# Draw the figures in a notebook as SVG rather than PNG: sharp at any zoom, and
-# saved as vectors.  Plain Python rather than the %config magic, so that this
-# file stays runnable as a script; outside a notebook there is no inline
-# backend and this quietly does nothing.
-try:
-    from matplotlib_inline.backend_inline import set_matplotlib_formats
-    set_matplotlib_formats("svg")
-except Exception:
-    pass
+# The figures are drawn by bokeh, so they can be zoomed, panned and read off by
+# hovering.  Where they go depends on whether there is a notebook to draw into:
+# in JupyterLite the kernel has imported ipykernel and they appear under the
+# cell, and at a terminal they are written as HTML and opened in a browser tab.
+IN_NOTEBOOK = "ipykernel" in sys.modules
+if IN_NOTEBOOK:
+    output_notebook(hide_banner=True)
 
-plt.rcParams.update({"figure.figsize": (7.0, 3.6), "axes.grid": True,
-                     "grid.color": "0.88", "grid.linewidth": 0.5,
-                     "figure.constrained_layout.use": True})
+# Colour-vision checked; cycled if you compare more systems than there are.
+COLOURS = ("#2a78d6", "#eda100", "#d55181", "#008300", "#7a5195", "#4a4a48")
+
+
+def panel(y_label, x_label=None, x_range=None, y_axis_type="linear"):
+    """One plot, sized and tooled the same as all the others."""
+    # x_range is passed only when there is one to share: bokeh rejects None
+    shared = {"x_range": x_range} if x_range is not None else {}
+    p = figure(width=780, height=270, x_axis_label=x_label, y_axis_label=y_label,
+               y_axis_type=y_axis_type, tools="pan,box_zoom,wheel_zoom,reset,save",
+               **shared)
+    p.add_tools(HoverTool(tooltips=[("", "$name"), ("x", "$x{0.0}"),
+                                    ("y", "$y{0.000 a}")], mode="vline"))
+    p.grid.grid_line_alpha = 0.35
+    p.toolbar.logo = None
+    return p
+
+
+def draw(panels, filename):
+    """Show a stack of panels: under the cell in a notebook, in a browser tab
+    from a script.  One toolbar drives all of them, and they share their x axis,
+    so zooming or panning any panel moves the others with it."""
+    if not IN_NOTEBOOK:
+        output_file(filename, title="SLoG PET explorer")
+    show(gridplot([[p] for p in panels], merge_tools=True, toolbar_location="right"))
 
 all_predified_systems = load_systems()
 
@@ -95,8 +122,8 @@ scan_lengths_mm = np.linspace(50.0, 2000.0, 41)
 # max ripple amplitude of the sensitivity axial profile (max_sens(z) / min_sens(z)) allowed in the optimal bed protocol; None means no limit
 ripple_limit = None   
 
-# %%
-# setup the scanners to be compared, from the names above and any custom ones
+## %%
+# ------------------------------ setup --------------------------------------
 
 scanners = []
 for name in system_names:
@@ -140,26 +167,29 @@ for scanner in scanners:
 
 
 # visualize the single bed axial efficiency profiles for each scanner
-fig, ax = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0))
-for scanner in scanners:
+geometry = panel("\u03b7(z)")
+with_eps = panel("\u03b5 \u00b7 \u03b7(z)", x_range=geometry.x_range)
+with_r = panel("r \u00b7 \u03b5 \u00b7 \u03b7(z)", "axial position z (cm)",
+               x_range=geometry.x_range)
+
+for scanner, colour in zip(scanners, cycle(COLOURS)):
     reach = 0.55 * scanner.L_pet
     zz = np.linspace(-reach, reach, 401)
     y = single_bed_eta_profiles[scanner.name].samples(zz)
+    style = dict(color=colour, line_width=2, name=scanner.label)
     # solid angle coverage only
-    ax[0].plot(zz / 10, y, lw=1.8, label=scanner.label)
+    geometry.line(zz / 10, y, legend_label=scanner.label, **style)
     # solid angle coverage times average detector-pair efficiency
-    ax[1].plot(zz / 10, scanner.efficiency() * y, lw=1.8, label=scanner.label)
+    with_eps.line(zz / 10, scanner.efficiency() * y, **style)
     # solid angle coverage times average detector-pair efficiency times SLoG resolution factor
-    ax[2].plot(zz / 10, scanner.r(task) * scanner.efficiency() * y, lw=1.8, label=scanner.label)
+    with_r.line(zz / 10, scanner.r(task) * scanner.efficiency() * y, **style)
 
-for axx in ax:
-    axx.set_ylim(bottom=0.0)
-
-ax[-1].set_xlabel("axial position $z$ (cm)")
-ax[0].set_ylabel(r"$\eta(z)$")
-ax[1].set_ylabel(r"$\varepsilon \, \eta(z)$")
-ax[2].set_ylabel(r"$r \, \varepsilon \, \eta(z)$")
-ax[0].legend()
+for p in (geometry, with_eps, with_r):
+    p.y_range.start = 0.0
+geometry.legend.location = "top_left"
+geometry.legend.click_policy = "hide"          # click a name to hide its curve
+geometry.legend.background_fill_alpha = 0.85
+draw([geometry, with_eps, with_r], "explore-single-bed.html")
 
 
 # %% [markdown]
@@ -197,17 +227,30 @@ for scanner in scanners:
     protocols[scanner.name] = pcol
 
 
-fig2, ax2 = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0))
-for scanner in scanners:
-    ax2[0].plot(scan_lengths_mm / 10, [p.n_beds if p is not None else np.nan for p in protocols[scanner.name]], drawstyle='steps-post', lw=1.8, label=scanner.label)
-    ax2[1].plot(scan_lengths_mm / 10, [p.overlap if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
-    ax2[2].plot(scan_lengths_mm / 10, [p.min_eta if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
+beds = panel("optimal number of beds")
+overlap = panel("optimal overlap (%)", x_range=beds.x_range)
+worst = panel("min \u03b7\u2099(z) over the range", "scan length S (cm)",
+              x_range=beds.x_range)
 
-ax2[-1].set_xlabel("scan length $S$ (cm)")
-ax2[0].set_ylabel(r"optimal number of beds")
-ax2[1].set_ylabel(r"optimal overlap")
-ax2[2].set_ylabel(r"$\min_z \eta_N(z)$")
-ax2[0].legend()
+
+def per_scan_length(scanner, attribute):
+    """One protocol attribute against scan length; NaN where the ripple limit
+    could not be met, which leaves a gap in the curve rather than a wrong point."""
+    return np.array([getattr(p, attribute) if p is not None else np.nan
+                     for p in protocols[scanner.name]], dtype=float)
+
+
+for scanner, colour in zip(scanners, cycle(COLOURS)):
+    style = dict(color=colour, line_width=2, name=scanner.label)
+    beds.step(scan_lengths_mm / 10, per_scan_length(scanner, "n_beds"),
+              mode="after", legend_label=scanner.label, **style)
+    overlap.line(scan_lengths_mm / 10, per_scan_length(scanner, "overlap"), **style)
+    worst.line(scan_lengths_mm / 10, per_scan_length(scanner, "min_eta"), **style)
+
+beds.legend.location = "top_left"
+beds.legend.click_policy = "hide"
+beds.legend.background_fill_alpha = 0.85
+draw([beds, overlap, worst], "explore-protocols.html")
 
 
 # %% [markdown]
@@ -242,23 +285,29 @@ for scanner in scanners:
 
     snr2_min[scanner.name] = np.array(values)
 
-fig3, ax3 = plt.subplots(2,1, figsize=(7.0, 6.0), sharex=True)
-for scanner in scanners:
-    ax3[0].plot(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=scanner.label)
-    ax3[1].semilogy(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=scanner.label)
+linear = panel("minimum SNR\u00b2")
+logarithmic = panel("minimum SNR\u00b2", "scan length S (cm)",
+                    x_range=linear.x_range, y_axis_type="log")
 
-ax3[-1].set_xlabel(r"scan length $S$ (cm)")
-ax3[0].set_ylabel(r"minimum SNR$^2$")
-ax3[1].set_ylabel(r"minimum SNR$^2$")
-ax3[0].legend()
+for scanner, colour in zip(scanners, cycle(COLOURS)):
+    style = dict(color=colour, line_width=2, name=scanner.label)
+    linear.line(scan_lengths_mm / 10, snr2_min[scanner.name],
+                legend_label=scanner.label, **style)
+    logarithmic.line(scan_lengths_mm / 10, snr2_min[scanner.name], **style)
+
+linear.y_range.start = 0.0
+linear.legend.location = "top_right"
+linear.legend.click_policy = "hide"
+linear.legend.background_fill_alpha = 0.85
+draw([linear, logarithmic], "explore-detectability.html")
 
 
 # %% [markdown]
 # ---
-# The figures above are drawn as each cell runs.  The call below matters only at
-# a terminal: `python explore.py` would otherwise exit and take its windows with
-# it.  In a notebook, and in ipython with `%matplotlib`, the figures have already
-# been shown and this returns at once.
-
-# %%
-plt.show()
+# Each figure has a toolbar: drag to pan, box- or wheel-zoom, hover to read a
+# curve off, and the save button writes a PNG.  Clicking a name in the legend
+# hides that system, which helps when several overlap.  The three panels of a
+# figure share their x axis, so zooming one zooms all of them.
+#
+# Run as a script rather than in a notebook, the same three figures are written
+# next to this file as `explore-*.html` and opened in a browser tab.

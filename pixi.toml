@@ -94,6 +94,7 @@ check-tex = { cmd = "kpsewhich amsmath.sty amssymb.sty booktabs.sty caption.sty 
 [feature.explore.dependencies]
 matplotlib = ">=3.5"
 ipython = ">=8"
+bokeh = ">=3.4"           # explore.py plots with bokeh, not matplotlib
 
 [feature.explore.tasks]
 ipython = { cmd = "ipython --matplotlib", description = "a prompt with the figures importable: from paper.fig_beds import make; make(None)" }
@@ -110,6 +111,7 @@ jupyterlite-pyodide-kernel = "*"
 jupyter_server = "*"          # jupyter lite build needs it to index the contents;
                               # conda-forge spells it with an underscore
 jupytext = ">=1.16"           # explore.py -> explore.ipynb
+bokeh = ">=3.4"               # so that this environment can also run explore.py
 
 [feature.lite.tasks]
 site = { cmd = "python lite/build.py", description = "build the JupyterLite site into lite/site" }

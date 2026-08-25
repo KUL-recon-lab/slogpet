@@ -27,3 +27,6 @@ __pycache__/
 lite/files/
 lite/site/
 lite/.cache/
+
+# written when explore.py is run as a script
+explore-*.html
