@@ -117,8 +117,8 @@ def systems_table(scanners: Sequence[Any], task: Optional[Any] = None) -> pd.Dat
     from its NEMA sensitivity and its geometry.
 
     Give a ``task`` and two more columns appear: ``r``, the resolution factor for
-    that particular lesion in that particular body, and ``eps * r``, the product
-    of the two things a system brings to it.  Both are independent of the scan
+    a SLoG of that size in an object of that diameter, and ``eps * r``, the
+    product of the two things a system brings to it.  Both are independent of the scan
     length and of the bed protocol, so they rank systems before any acquisition
     is chosen -- the axial profile then decides how much of that survives over a
     long range.

@@ -1,12 +1,24 @@
 # %% [markdown]
 # # Comparing PET systems on a resolution-dependent task
 #
-# How well a PET system detects a small lesion depends on three things that pull
-# against each other: how much of the emitted signal it catches, how sharply it
-# resolves the lesion, and how evenly it covers the range being scanned.  This
-# notebook works all three out for whichever systems you choose, using the same
-# `slogpet` package as the paper -- there is no physics in this file, only
-# choices and plots.
+# The task is the one the paper uses, after Nuyts et al.: on a uniform
+# background, decide whether the added activity is a small hot blob,
+# $3\sigma_\mathrm{o}^3 G_3(\vec{r})$, or a wider blob with a cold interior,
+# $\sigma_\mathrm{o}\,|\vec{r}|^2 G_3(\vec{r})$, the two carrying the *same*
+# total activity.  Their difference is a SLoG, a scaled Laplacian of a Gaussian;
+# it integrates to zero, so no amount of counting separates the two and only
+# resolving the shape can.  `F_o` is the width of the hot blob -- not of the
+# SLoG -- and that is the resolution the task demands.
+#
+# How well a system does at it depends on three things that pull against each
+# other: how much of the emitted signal it catches, how sharply it resolves,
+# and how evenly it covers the range being scanned.  This notebook works all
+# three out for whichever systems you choose, using the same `slogpet` package
+# as the paper -- there is no physics in this file, only choices and plots.
+#
+# Because the task discriminates on size, it is *unusually* sensitive to
+# detector resolution.  What follows ranks systems on that task, and is not a
+# general statement about image quality.
 #
 # **To use it:** edit the parameters in the second cell, then run everything.
 # Nothing is sent anywhere; the calculation runs in your own browser.
@@ -49,9 +61,9 @@ show_table(systems_table(all_predified_systems))
 # * `custom_scanners` -- a system of your own.  Give either `epsilon`, the
 #   detector-pair efficiency, or `S_nema`, the NEMA NU 2 sensitivity in cps/kBq;
 #   the package derives one from the other and the geometry.
-# * `task` -- the lesion (`F_o`, its size as a Gaussian FWHM in mm) and the body
-#   it sits in (`D_cyl`, a water cylinder).  A smaller lesion asks more of the
-#   resolution, so which system wins can change with `F_o`.
+# * `task` -- the SLoG (`F_o`, the width of the hot blob as a Gaussian FWHM in
+#   mm) and the object it sits in (`D_cyl`, a water cylinder).  A smaller `F_o`
+#   demands more resolution, so which system wins can change with it.
 # * `scan_lengths_mm` -- the axial range to cover, swept from a single organ to
 #   a total-body scan.
 # * `ripple_limit` -- how uneven the sensitivity along the range is allowed to
@@ -103,9 +115,9 @@ if custom_scanners is not None:
 # The same table, with the systems you defined yourself added to it, and two
 # columns that only mean anything once the task is fixed:
 #
-# * $r$, the resolution factor -- how much of a lesion this size survives the
+# * $r$, the resolution factor -- how much of a SLoG of this size survives the
 #   system's spatial and timing resolution.  A system without time of flight
-#   also pays for the body diameter here.
+#   also pays for the object diameter here.
 # * $\varepsilon \, r$, the product of the two things a system brings to the
 #   task, before any acquisition is chosen.
 #
@@ -133,8 +145,8 @@ show_table(systems_table(list(all_predified_systems) + list(custom_scanners or [
 # 2. times $\varepsilon$, the detector-pair efficiency -- how many of the pairs
 #    that reach the crystals are actually recorded.
 # 3. times $r$, the resolution factor -- how much of the signal survives the
-#    system's spatial and timing resolution for a lesion of this size.  For a
-#    system without time of flight this depends on the body diameter too.
+#    system's spatial and timing resolution for a SLoG of this size.  For a
+#    system without time of flight this depends on the object diameter too.
 #
 # The systems look alike in the first panel and fan out by a large factor in the
 # third: the profile is not where the difference lives.
