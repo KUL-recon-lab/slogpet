@@ -1,5 +1,6 @@
 # %%
 import numpy as np
+import scipy.integrate  # dummy import of scipy needed for Pyodide - leave it
 import matplotlib.pyplot as plt
 
 import slogpet as sp
