@@ -20,57 +20,58 @@ print()
 
 
 # %%
-# ------------------------------ parameters ---------------------------------
-# Systems to compare, by name.  Everything the paper tabulates is available;
-# print_catalogue() below lists them.
-SYSTEMS = (
+# setup scanners to be compared
+
+# names of predefined systems to compare; must be in the catalogue
+system_names = (
     "uMI Panorama",
     "Biograph Vision Quadra",
     "Omni 128",
     "uMI Panorama GS",
 )
 
-# A system of your own, or None.  Give either epsilon (the detector-pair
-# efficiency) or S_nema (the NEMA NU 2 sensitivity in cps/kBq, 70 cm line
-# source); the package works the other one out from the geometry.
-#CUSTOM_SCANNER = None
-CUSTOM_SCANNERS = [sp.Scanner(name="my scanner", L_pet=1200.0, D_pet=760.0, F_y=3.5, F_z=3.5, ctr=200.0, S_nema=250.0)]
+# list of custom scanners to compare; must be instances of slogpet.types.Scanner
+custom_scanners = [sp.Scanner(name="my scanner", L_pet=700.0, D_pet=760.0, F_y=3.5, F_z=3.5, ctr=200.0, epsilon=0.2)]
+#custom_scanners = None
 
-# The detection task
+# defined the SLoG task to be used for the comparison
 task = sp.Task(F_o = 5.0, D_cyl = 200.0, mu = 0.0096)   # mu is the linear attenuation coefficient of water at 511 keV, mm^-1
 
 # The acquisition
 scan_lengths_mm = np.linspace(50.0, 2000.0, 41)
-RIPPLE_LIMIT = None                    # e.g. 1.2 for at most 20 % ripple, or None
 
-# %%
+# max ripple amplitude of the sensitivity axial profile (max_sens(z) / min_sens(z)) allowed in the optimal bed protocol; None means no limit
+ripple_limit = None   
+
+## %%
 # ------------------------------ setup --------------------------------------
 
 scanners = []
-for name in SYSTEMS:
+for name in system_names:
     hits = [s for s in all_predified_systems if s.name == name]
     if not hits:
         raise SystemExit("no system called %r; run print_catalogue()" % name)
     scanners.append(hits[0])                  # the first, where a name repeats
 
-if CUSTOM_SCANNERS is not None:
-    scanners.extend(CUSTOM_SCANNERS)
+if custom_scanners is not None:
+    scanners.extend(custom_scanners)
 
 
 # %%
 # -------------
 # calculate and visualize the single bed axial efficiency profiles for each scanner
 
-profiles = {}
+single_bed_eta_profiles = {}
 for scanner in scanners:
-    profile = sp.axial_profile(scanner, task.D_cyl, task.mu)
-    profiles[scanner.name] = profile
+    single_bed_eta_profiles[scanner.name] = sp.axial_profile(scanner, task.D_cyl, task.mu)
 
-fig, ax = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0), layout="constrained")
+
+# visualize the single bed axial efficiency profiles for each scanner
+fig, ax = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0))
 for scanner in scanners:
     reach = 0.55 * scanner.L_pet
     zz = np.linspace(-reach, reach, 401)
-    y = profiles[scanner.name].samples(zz)
+    y = single_bed_eta_profiles[scanner.name].samples(zz)
     # solid angle coverage only
     ax[0].plot(zz / 10, y, lw=1.8, label=scanner.label)
     # solid angle coverage times average detector-pair efficiency
@@ -97,7 +98,7 @@ for scanner in scanners:
     pcol = []
     for S in scan_lengths_mm:
         try:
-            protocol = sp.optimal_protocol(profiles[scanner.name], float(S), max_peak_to_trough=RIPPLE_LIMIT)
+            protocol = sp.optimal_protocol(single_bed_eta_profiles[scanner.name], float(S), max_peak_to_trough=ripple_limit)
             pcol.append(protocol)
         except ValueError:                   # the limit cannot be met here
             pcol.append(None)
@@ -105,9 +106,9 @@ for scanner in scanners:
     protocols[scanner.name] = pcol
 
 
-fig2, ax2 = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0), layout="constrained")
+fig2, ax2 = plt.subplots(3,1, sharex=True, figsize=(7.0, 8.0))
 for scanner in scanners:
-    ax2[0].plot(scan_lengths_mm / 10, [p.n_beds if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
+    ax2[0].plot(scan_lengths_mm / 10, [p.n_beds if p is not None else np.nan for p in protocols[scanner.name]], drawstyle='steps-post', lw=1.8, label=scanner.label)
     ax2[1].plot(scan_lengths_mm / 10, [p.overlap if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
     ax2[2].plot(scan_lengths_mm / 10, [p.min_eta if p is not None else np.nan for p in protocols[scanner.name]], lw=1.8, label=scanner.label)
 
@@ -135,7 +136,7 @@ for scanner in scanners:
 
     snr2_min[scanner.name] = np.array(values)
 
-fig3, ax3 = plt.subplots(2,1, figsize=(7.0, 6.0), layout="constrained", sharex=True)
+fig3, ax3 = plt.subplots(2,1, figsize=(7.0, 6.0), sharex=True)
 for scanner in scanners:
     ax3[0].plot(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=scanner.label)
     ax3[1].semilogy(scan_lengths_mm / 10,  snr2_min[scanner.name], lw=1.8, label=scanner.label)
